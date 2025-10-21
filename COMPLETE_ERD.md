@@ -1,6 +1,6 @@
 # Wallet Service - Complete Entity Relationship Diagram (ERD)
 
-**Version**: 2.0 (with Business Line Support)
+**Version**: 3.0 (Simplified with Hierarchical Business Structure)
 **Last Updated**: October 2025
 **Database**: Oracle 19c Enterprise Edition
 
@@ -10,19 +10,14 @@
 
 ```mermaid
 erDiagram
+    BUSINESS ||--o{ BUSINESS : "has_children"
     BUSINESS ||--o{ USER : "employs"
-    BUSINESS ||--o{ BUSINESS_LINE : "has_divisions"
-    BUSINESS_LINE ||--o{ WALLET : "segregates"
+    BUSINESS ||--o{ WALLET : "contains"
     USER ||--o{ WALLET : "owns"
     WALLET ||--o{ LEDGER_ENTRY : "records"
     TRANSACTION ||--o{ LEDGER_ENTRY : "contains"
     USER ||--o{ TRANSACTION : "initiates"
     BUSINESS ||--o{ TRANSACTION : "processes"
-    DISCOUNT_CODE ||--o{ TRANSACTION : "applies_to"
-    DISCOUNT_CODE ||--o{ DISCOUNT_CODE_ELIGIBILITY : "has_eligibility"
-    DISCOUNT_CODE_ELIGIBILITY }o--o| USER : "specific_user"
-    DISCOUNT_CODE_ELIGIBILITY }o--o| BUSINESS : "specific_business"
-    DISCOUNT_CODE_ELIGIBILITY }o--o| BUSINESS_LINE : "specific_business_line"
     TRANSACTION ||--o| TRANSACTION : "rollback_of"
     TRANSACTION ||--o{ PAYMENT_METADATA : "has"
     USER ||--o{ CREDIT_ACCOUNT : "holds"
@@ -31,7 +26,9 @@ erDiagram
 
     BUSINESS {
         uuid id PK
+        uuid parent_id FK
         string name
+        string code
         string business_type
         string tax_id
         string country
@@ -41,20 +38,11 @@ erDiagram
         string city
         string state
         string postal_code
-        timestamp created_at
-        timestamp updated_at
-        string status
-    }
-
-    BUSINESS_LINE {
-        uuid id PK
-        uuid business_id FK
-        string name
-        string code
         string description
         boolean is_active
         timestamp created_at
         timestamp updated_at
+        string status
     }
 
     USER {
@@ -75,7 +63,6 @@ erDiagram
         uuid id PK
         uuid user_id FK
         uuid business_id FK
-        uuid business_line_id FK
         string currency
         string wallet_type
         string wallet_name
@@ -98,9 +85,6 @@ erDiagram
         string payment_type
         string status
         string idempotency_key
-        uuid discount_code_id FK
-        bigint discount_amount
-        bigint final_amount
         uuid ref_transaction_id FK
         string gateway_transaction_id
         string correlation_id
@@ -118,37 +102,6 @@ erDiagram
         string currency
         timestamp created_at
         string status
-    }
-
-    DISCOUNT_CODE {
-        uuid id PK
-        string code
-        string discount_type
-        decimal discount_value
-        bigint min_amount
-        bigint max_discount
-        timestamp start_date
-        timestamp expiry_date
-        int max_usage
-        int usage_count
-        int max_per_user
-        string eligibility_type
-        string description
-        timestamp created_at
-        timestamp updated_at
-        string status
-        int version
-    }
-
-    DISCOUNT_CODE_ELIGIBILITY {
-        uuid id PK
-        uuid discount_code_id FK
-        string eligibility_type
-        uuid user_id FK
-        uuid business_id FK
-        uuid business_line_id FK
-        string user_email
-        timestamp created_at
     }
 
     PAYMENT_METADATA {
@@ -196,44 +149,39 @@ erDiagram
 
 ### Core Entities
 
-#### 1. BUSINESS
-**Purpose**: Represents business entities for B2B operations
+#### 1. BUSINESS (HIERARCHICAL)
+**Purpose**: Represents business entities for B2B operations with support for business lines in a parent-child structure
 
 **Key Attributes**:
 - `id`: Unique identifier (UUID)
-- `name`: Business legal name
-- `business_type`: CORPORATION, LLC, PARTNERSHIP, SOLE_PROPRIETOR
-- `tax_id`: Encrypted tax identification number
-- `country`: ISO 3166-1 alpha-2 country code
+- `parent_id`: NULL for parent business, populated for business lines/divisions
+- `name`: Business legal name or business line name
+- `code`: Business line code (e.g., "ECOMMERCE", "CRYPTO") - NULL for parent businesses
+- `business_type`: CORPORATION, LLC, PARTNERSHIP, SOLE_PROPRIETOR (only for parent businesses)
+- `tax_id`: Encrypted tax identification number (only for parent businesses)
+- `country`: ISO 3166-1 alpha-2 country code (only for parent businesses)
+- `description`: Optional description (primarily for business lines)
+- `is_active`: Active status flag
 - `status`: ACTIVE, SUSPENDED, CLOSED
 
+**Hierarchical Structure**:
+- Parent records: `parent_id IS NULL` - Represents top-level businesses
+- Child records: `parent_id IS NOT NULL` - Represents business lines/divisions
+
 **Relationships**:
-- Has many USERS (employees)
-- Has many BUSINESS_LINES (divisions/departments)
+- Has many child BUSINESSES (business lines)
+- Has many USERS (employees) - only parent businesses
+- Has many WALLETS (can reference parent or child business)
 - Processes many TRANSACTIONS
-
----
-
-#### 2. BUSINESS_LINE (NEW)
-**Purpose**: Represents divisions/departments within a business for wallet segregation
-
-**Key Attributes**:
-- `id`: Unique identifier (UUID)
-- `business_id`: Parent business (FK)
-- `name`: Business line name (e.g., "E-commerce", "Crypto", "Marketing")
-- `code`: Unique code per business (e.g., "ECOMMERCE", "CRYPTO")
-- `description`: Business line description
-- `is_active`: Active status flag
-
-**Relationships**:
-- Belongs to one BUSINESS
-- Has many WALLETS (segregated per business line)
-- Referenced by DISCOUNT_CODE_ELIGIBILITY for business line-specific discounts
 
 **Example**:
 ```sql
--- business-1 with 3 business lines
-INSERT INTO business_lines (id, business_id, name, code) VALUES
+-- Create parent business
+INSERT INTO businesses (id, parent_id, name, business_type, country, email)
+VALUES ('biz-001', NULL, 'Acme Corp', 'CORPORATION', 'US', 'contact@acme.com');
+
+-- Create business lines as children
+INSERT INTO businesses (id, parent_id, name, code) VALUES
   ('line-ecom', 'biz-001', 'E-commerce', 'ECOMMERCE'),
   ('line-crypto', 'biz-001', 'Crypto', 'CRYPTO'),
   ('line-sample3', 'biz-001', 'Sample-3', 'SAMPLE3');
@@ -241,7 +189,7 @@ INSERT INTO business_lines (id, business_id, name, code) VALUES
 
 ---
 
-#### 3. USER
+#### 2. USER
 **Purpose**: User accounts for both B2C consumers and B2B employees
 
 **Key Attributes**:
@@ -262,14 +210,13 @@ INSERT INTO business_lines (id, business_id, name, code) VALUES
 
 ---
 
-#### 4. WALLET (ENHANCED)
-**Purpose**: Container for user funds in specific currency with business and business line segregation
+#### 3. WALLET
+**Purpose**: Container for user funds in specific currency with hierarchical business support
 
 **Key Attributes**:
 - `id`: Unique identifier (UUID)
 - `user_id`: Wallet owner (FK)
-- `business_id`: NULL for personal wallets, populated for business wallets
-- `business_line_id`: NULL for business-level wallets, populated for business line-specific wallets (NEW)
+- `business_id`: NULL for personal B2C wallets, references parent business OR business line (child)
 - `currency`: ISO 4217 currency code (USD, EUR, BTC, etc.)
 - `wallet_type`: STANDARD, SAVINGS, BUSINESS, ESCROW, PERSONAL
 - `wallet_name`: User-friendly name (e.g., "E-commerce USD", "Crypto BTC")
@@ -279,10 +226,9 @@ INSERT INTO business_lines (id, business_id, name, code) VALUES
 
 **Unique Constraint**:
 ```sql
-CREATE UNIQUE INDEX idx_wallet_user_business_line_currency ON wallets(
+CREATE UNIQUE INDEX idx_wallet_user_business_currency ON wallets(
     user_id,
     COALESCE(business_id, RAW '00000000000000000000000000000000'),
-    COALESCE(business_line_id, RAW '00000000000000000000000000000000'),
     currency,
     wallet_type
 );
@@ -290,8 +236,7 @@ CREATE UNIQUE INDEX idx_wallet_user_business_line_currency ON wallets(
 
 **Relationships**:
 - Belongs to one USER
-- Optionally belongs to one BUSINESS
-- Optionally belongs to one BUSINESS_LINE (NEW)
+- Optionally references one BUSINESS (can be parent or child business line)
 - Has many LEDGER_ENTRIES
 
 **Example Scenarios**:
@@ -299,23 +244,23 @@ CREATE UNIQUE INDEX idx_wallet_user_business_line_currency ON wallets(
 **Scenario 1: Multi-Business User (Alice)**
 ```
 Alice works for Acme Corp and TechStart:
-- Personal USD: (user=alice, business=NULL, business_line=NULL, currency=USD)
-- Acme USD:     (user=alice, business=acme, business_line=NULL, currency=USD)
-- TechStart USD:(user=alice, business=tech, business_line=NULL, currency=USD)
+- Personal USD: (user=alice, business_id=NULL, currency=USD)
+- Acme USD:     (user=alice, business_id=biz-001, currency=USD)  -- parent business
+- TechStart USD:(user=alice, business_id=biz-002, currency=USD)  -- different parent
 ```
 
 **Scenario 2: Business Line Segregation (John in business-1)**
 ```
-John works in business-1 with 3 divisions:
-- E-commerce USD: (user=john, business=biz-001, business_line=line-ecom, currency=USD)
-- Crypto USD:     (user=john, business=biz-001, business_line=line-crypto, currency=USD)
-- Crypto BTC:     (user=john, business=biz-001, business_line=line-crypto, currency=BTC)
-- Sample-3 USD:   (user=john, business=biz-001, business_line=line-sample3, currency=USD)
+John works in business-1 with business lines:
+- Personal:       (user=john, business_id=NULL, currency=USD)
+- E-commerce USD: (user=john, business_id=line-ecom, currency=USD)   -- business line
+- Crypto USD:     (user=john, business_id=line-crypto, currency=USD)  -- business line
+- Crypto BTC:     (user=john, business_id=line-crypto, currency=BTC)  -- same line, diff currency
 ```
 
 ---
 
-#### 5. TRANSACTION
+#### 4. TRANSACTION
 **Purpose**: Immutable record of a financial operation
 
 **Key Attributes**:
@@ -329,9 +274,6 @@ John works in business-1 with 3 divisions:
 - `payment_type`: PREPAYMENT, POSTPAYMENT, VALUABLE, CREDIT
 - `status`: PENDING, CONFIRMED, COMPLETED, FAILED, ROLLED_BACK
 - `idempotency_key`: Client-provided unique key for idempotency
-- `discount_code_id`: Applied discount code (FK, nullable)
-- `discount_amount`: Discount amount in minor units
-- `final_amount`: Final amount after discount
 - `ref_transaction_id`: Reference to original transaction (for rollbacks)
 - `gateway_transaction_id`: External payment gateway transaction ID
 - `correlation_id`: Distributed tracing ID
@@ -350,13 +292,12 @@ FAILED → ROLLED_BACK
 - References source and destination WALLETS
 - Has many LEDGER_ENTRIES (minimum 2 for double-entry)
 - May reference another TRANSACTION (for rollbacks)
-- May use one DISCOUNT_CODE
 - Has many PAYMENT_METADATA records
 - May have many INSTALLMENT_SCHEDULE records
 
 ---
 
-#### 6. LEDGER_ENTRY
+#### 5. LEDGER_ENTRY
 **Purpose**: Double-entry bookkeeping records for immutable audit trail
 
 **Key Attributes**:
@@ -381,71 +322,9 @@ FAILED → ROLLED_BACK
 
 ---
 
-#### 7. DISCOUNT_CODE
-**Purpose**: Promotional discount codes with eligibility rules
-
-**Key Attributes**:
-- `id`: Unique identifier (UUID)
-- `code`: Unique discount code (e.g., "SAVE20", "ECOM25")
-- `discount_type`: PERCENTAGE or FIXED_AMOUNT
-- `discount_value`: Percentage (1-100) or fixed amount
-- `min_amount`: Minimum transaction amount to use discount
-- `max_discount`: Maximum discount amount (for percentage type)
-- `start_date`: Discount start date
-- `expiry_date`: Discount expiry date
-- `max_usage`: Global usage limit
-- `usage_count`: Current usage count
-- `max_per_user`: Per-user usage limit
-- `eligibility_type`: PUBLIC or RESTRICTED
-- `status`: ACTIVE, EXPIRED, DISABLED
-
-**Relationships**:
-- Has many DISCOUNT_CODE_ELIGIBILITY rules (for RESTRICTED type)
-- Applied to many TRANSACTIONS
-
----
-
-#### 8. DISCOUNT_CODE_ELIGIBILITY (ENHANCED)
-**Purpose**: Eligibility rules for restricted discount codes
-
-**Key Attributes**:
-- `id`: Unique identifier (UUID)
-- `discount_code_id`: Parent discount code (FK)
-- `eligibility_type`: ALL_USERS, SPECIFIC_USER, SPECIFIC_BUSINESS, SPECIFIC_BUSINESS_LINE, EMAIL_DOMAIN, USER_ROLE
-- `user_id`: For SPECIFIC_USER eligibility (FK, nullable)
-- `business_id`: For SPECIFIC_BUSINESS eligibility (FK, nullable)
-- `business_line_id`: For SPECIFIC_BUSINESS_LINE eligibility (FK, nullable) (NEW)
-- `user_email`: For EMAIL_DOMAIN or USER_ROLE eligibility
-
-**Relationships**:
-- Belongs to one DISCOUNT_CODE
-- Optionally references one USER
-- Optionally references one BUSINESS
-- Optionally references one BUSINESS_LINE (NEW)
-
-**Examples**:
-```sql
--- Public discount (no eligibility rules needed)
-INSERT INTO discount_codes (code, eligibility_type) VALUES ('PUBLIC20', 'PUBLIC');
-
--- Business-specific discount
-INSERT INTO discount_code_eligibility (discount_code_id, eligibility_type, business_id)
-VALUES ('disc-001', 'SPECIFIC_BUSINESS', 'biz-acme');
-
--- Business line-specific discount (NEW)
-INSERT INTO discount_code_eligibility (discount_code_id, eligibility_type, business_line_id)
-VALUES ('disc-002', 'SPECIFIC_BUSINESS_LINE', 'line-ecom');
-
--- Email domain discount
-INSERT INTO discount_code_eligibility (discount_code_id, eligibility_type, user_email)
-VALUES ('disc-003', 'EMAIL_DOMAIN', 'acme.com');
-```
-
----
-
 ### Supporting Entities
 
-#### 9. PAYMENT_METADATA
+#### 6. PAYMENT_METADATA
 **Purpose**: Key-value metadata for transactions
 
 **Attributes**:
@@ -457,7 +336,7 @@ VALUES ('disc-003', 'EMAIL_DOMAIN', 'acme.com');
 
 ---
 
-#### 10. CREDIT_ACCOUNT
+#### 7. CREDIT_ACCOUNT
 **Purpose**: Credit line accounts for installment payments
 
 **Attributes**:
@@ -471,7 +350,7 @@ VALUES ('disc-003', 'EMAIL_DOMAIN', 'acme.com');
 
 ---
 
-#### 11. INSTALLMENT_SCHEDULE
+#### 8. INSTALLMENT_SCHEDULE
 **Purpose**: Installment payment schedules
 
 **Attributes**:
@@ -485,7 +364,7 @@ VALUES ('disc-003', 'EMAIL_DOMAIN', 'acme.com');
 
 ---
 
-#### 12. IDEMPOTENCY_KEY
+#### 9. IDEMPOTENCY_KEY
 **Purpose**: Ensures idempotent transaction processing
 
 **Attributes**:
@@ -502,18 +381,16 @@ VALUES ('disc-003', 'EMAIL_DOMAIN', 'acme.com');
 
 ## Key Relationships Summary
 
-### Business Hierarchy
+### Business Hierarchy (Self-Referencing)
 ```
-BUSINESS (1) ──── has many ───> (N) BUSINESS_LINE
-BUSINESS (1) ──── employs ───> (N) USER
-BUSINESS_LINE (1) ── segregates ─> (N) WALLET
+BUSINESS (parent) ──── has many children ───> (N) BUSINESS (child/business lines)
+BUSINESS (parent) ──── employs ───> (N) USER
 ```
 
 ### Wallet Ownership
 ```
 USER (1) ──── owns ───> (N) WALLET
-WALLET (N) ── optionally belongs to ─> (1) BUSINESS
-WALLET (N) ── optionally belongs to ─> (1) BUSINESS_LINE
+WALLET (N) ── optionally references ─> (1) BUSINESS (parent or child business line)
 ```
 
 ### Transaction Flow
@@ -521,13 +398,6 @@ WALLET (N) ── optionally belongs to ─> (1) BUSINESS_LINE
 USER (1) ──── initiates ───> (N) TRANSACTION
 TRANSACTION (1) ──── contains ───> (N) LEDGER_ENTRY
 LEDGER_ENTRY (N) ──── affects ───> (1) WALLET
-```
-
-### Discount Application
-```
-DISCOUNT_CODE (1) ──── has ───> (N) DISCOUNT_CODE_ELIGIBILITY
-DISCOUNT_CODE_ELIGIBILITY (N) ── references ─> (1) BUSINESS_LINE (optional)
-DISCOUNT_CODE (1) ──── applies to ───> (N) TRANSACTION
 ```
 
 ---
@@ -541,30 +411,29 @@ All entities use UUID (RAW(16)) as primary key with `SYS_GUID()` default.
 All foreign key relationships enforce referential integrity with `ON DELETE RESTRICT` (default).
 
 ### Unique Constraints
-- `businesses.tax_id + country` (unique per country)
+- `businesses.tax_id + country` (unique per country) WHERE parent_id IS NULL
+- `businesses.(parent_id, code)` (unique business line code per parent)
 - `users.email` (globally unique)
-- `wallets.(user_id, business_id, business_line_id, currency, wallet_type)` (unique with COALESCE for NULLs)
-- `discount_codes.code` (globally unique)
-- `business_lines.(business_id, code)` (unique per business)
+- `wallets.(user_id, business_id, currency, wallet_type)` (unique with COALESCE for NULLs)
 
 ### Check Constraints
 - `wallet.reserved_amount >= 0`
 - `transaction.amount > 0`
 - `ledger_entry.amount > 0`
-- `business_line.is_active IN (0, 1)`
+- `business.is_active IN (0, 1)`
 - `wallet.is_active IN (0, 1)`
+- `(parent_id IS NULL AND business_type IS NOT NULL) OR (parent_id IS NOT NULL AND code IS NOT NULL)`
 
 ### Indexes
 ```sql
 -- Performance indexes
+CREATE INDEX idx_business_parent ON businesses(parent_id);
 CREATE INDEX idx_wallet_user ON wallets(user_id);
 CREATE INDEX idx_wallet_business ON wallets(business_id);
-CREATE INDEX idx_wallet_business_line ON wallets(business_line_id);
 CREATE INDEX idx_transaction_user ON transactions(user_id);
 CREATE INDEX idx_transaction_created ON transactions(created_at DESC);
 CREATE INDEX idx_ledger_wallet ON ledger_entries(wallet_id);
 CREATE INDEX idx_ledger_status ON ledger_entries(status);
-CREATE INDEX idx_business_line_business ON business_lines(business_id);
 ```
 
 ---
@@ -595,26 +464,26 @@ PARTITION BY RANGE (created_at) INTERVAL (NUMTOYMINTERVAL(1, 'MONTH'))
 
 ## New Features Summary
 
-### Business Line Wallet Segregation (Version 2.0)
+### Hierarchical Business Structure (Version 3.0)
 
 **What's New**:
-1. **BUSINESS_LINE table** - Represents divisions/departments within a business
-2. **WALLET.business_line_id** - Links wallets to specific business lines
-3. **Enhanced unique constraint** - Allows multiple wallets per currency across business lines
-4. **DISCOUNT_CODE_ELIGIBILITY.business_line_id** - Business line-specific discounts
+1. **Self-referencing BUSINESS table** - Parent-child structure eliminates separate business_line table
+2. **Simplified schema** - Businesses and business lines in one table with parent_id
+3. **WALLET.business_id** - Can reference either parent business or child business line
+4. **Removed discount code complexity** - Simplified transaction model
 
 **Use Case**:
 ```
-business-1 (100 users) has 3 business lines:
-- E-commerce Line
-- Crypto Line
-- Sample-3 Line
+Acme Corp (parent business):
+├── E-commerce Division (child)
+├── Crypto Division (child)
+└── Marketing Division (child)
 
-Each user can have separate wallets per business line:
-- John's E-commerce USD wallet
-- John's Crypto USD wallet
-- John's Crypto BTC wallet
-- John's Sample-3 USD wallet
+Each user can have separate wallets per division:
+- John's E-commerce USD wallet (references child business)
+- John's Crypto USD wallet (references child business)
+- John's Crypto BTC wallet (references child business)
+- John's Marketing USD wallet (references child business)
 
 All wallets have independent balances and operations.
 ```
@@ -625,11 +494,10 @@ All wallets have independent balances and operations.
 
 - **[database-schema.md](./docs/02-domain-model/database-schema.md)** - Complete DDL scripts
 - **[entity-relationships.md](./docs/02-domain-model/entity-relationships.md)** - Detailed entity descriptions
-- **[BUSINESS_LINE_WALLET_SUPPORT.md](./BUSINESS_LINE_WALLET_SUPPORT.md)** - Business line feature guide
 - **[PRODUCT_DESIGN.md](./docs/PRODUCT_DESIGN.md)** - Visual product design with diagrams
 
 ---
 
-**Version**: 2.0 (Enhanced with Business Line Support)
+**Version**: 3.0 (Simplified Hierarchical Business Structure)
 **Last Updated**: October 2025
 **Status**: Production-Ready Design
