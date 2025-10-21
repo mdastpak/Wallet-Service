@@ -1,0 +1,333 @@
+openapi: 3.0.3
+info:
+  title: Wallet Service API
+  version: 1.0.0
+  description: |
+    Enterprise-grade wallet management system supporting multi-tenant B2B and B2C operations.
+
+    ## Features
+    - Multi-currency wallet management
+    - Double-entry ledger accounting
+    - Four payment types (PREPAYMENT, POSTPAYMENT, VALUABLE, CREDIT)
+    - Idempotency protection with configurable TTL
+    - Real-time balance aggregation
+    - Discount code support
+    - OAuth 2.0 and mTLS authentication
+    - Comprehensive audit trails
+
+  contact:
+    name: API Support
+    email: api-support@wallet-service.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.wallet-service.com/v1
+    description: Production
+  - url: https://staging.wallet-service.com/v1
+    description: Staging
+  - url: http://localhost:8080/v1
+    description: Local Development
+
+security:
+  - oauth2: []
+  - mtls: []
+
+tags:
+  - name: Wallets
+    description: Wallet management operations
+  - name: Payments
+    description: Payment processing and rollbacks
+  - name: Aggregation
+    description: Balance aggregation and reporting
+  - name: Discounts
+    description: Discount code management
+  - name: Admin
+    description: Administrative operations
+
+paths:
+  /wallets:
+    post:
+      summary: Create Wallet
+      operationId: createWallet
+      tags: [Wallets]
+      security:
+        - oauth2: [wallet:write]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWalletRequest'
+            examples:
+              usd-standard:
+                value:
+                  user_id: "550e8400-e29b-41d4-a716-446655440000"
+                  currency: "USD"
+                  wallet_type: "STANDARD"
+      responses:
+        '201':
+          description: Wallet created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WalletResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /wallets/{wallet_id}/balance:
+    get:
+      summary: Get Wallet Balance
+      operationId: getWalletBalance
+      tags: [Wallets]
+      security:
+        - oauth2: [wallet:read]
+      parameters:
+        - $ref: '#/components/parameters/WalletIdPath'
+        - name: refresh
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Force recomputation (skip cache)
+      responses:
+        '200':
+          description: Balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceResponse'
+
+  /payments:
+    post:
+      summary: Create Payment
+      operationId: createPayment
+      tags: [Payments]
+      security:
+        - oauth2: [payment:create]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentRequest'
+      responses:
+        '200':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+        '409':
+          description: Duplicate request in progress
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /aggregates/users/{user_id}/balance:
+    get:
+      summary: Get User Total Balance
+      operationId: getUserBalance
+      tags: [Aggregation]
+      security:
+        - oauth2: [balance:read]
+      parameters:
+        - $ref: '#/components/parameters/UserIdPath'
+      responses:
+        '200':
+          description: User balance aggregated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AggregateBalanceResponse'
+
+components:
+  securitySchemes:
+    oauth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.wallet-service.com/oauth/authorize
+          tokenUrl: https://auth.wallet-service.com/oauth/token
+          scopes:
+            wallet:read: Read wallet information
+            wallet:write: Create and modify wallets
+            payment:create: Create payments
+            payment:rollback: Rollback payments
+            balance:read: Read balances
+    mtls:
+      type: mutualTLS
+      description: Mutual TLS for B2B integrations
+
+  parameters:
+    WalletIdPath:
+      name: wallet_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserIdPath:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^[a-zA-Z0-9_-]{8,255}$'
+      description: Client-generated unique key (UUID recommended)
+
+  schemas:
+    CreateWalletRequest:
+      type: object
+      required: [user_id, currency]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+          pattern: '^[A-Z]{3}$'
+          example: USD
+        wallet_type:
+          type: string
+          enum: [STANDARD, SAVINGS, BUSINESS, ESCROW]
+          default: STANDARD
+
+    WalletResponse:
+      type: object
+      properties:
+        wallet_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        wallet_type:
+          type: string
+        balance:
+          type: string
+          pattern: '^\d+\.\d{2}$'
+        status:
+          type: string
+          enum: [ACTIVE, FROZEN, CLOSED]
+        created_at:
+          type: string
+          format: date-time
+
+    BalanceResponse:
+      type: object
+      properties:
+        wallet_id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        balance:
+          type: string
+        available_balance:
+          type: string
+        reserved_amount:
+          type: string
+        last_updated:
+          type: string
+          format: date-time
+        cached:
+          type: boolean
+
+    PaymentRequest:
+      type: object
+      required: [user_id, amount, currency, payment_type]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        source_wallet_id:
+          type: string
+          format: uuid
+        destination_wallet_id:
+          type: string
+          format: uuid
+        amount:
+          type: string
+          pattern: '^\d+\.\d{2}$'
+        currency:
+          type: string
+        payment_type:
+          type: string
+          enum: [PREPAYMENT, POSTPAYMENT, VALUABLE, CREDIT]
+        discount_code:
+          type: string
+          nullable: true
+
+    PaymentResponse:
+      type: object
+      properties:
+        transaction_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, COMPLETED]
+        amount:
+          type: string
+        final_amount:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    AggregateBalanceResponse:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        total_balance:
+          type: object
+          additionalProperties:
+            type: string
+        wallets:
+          type: array
+          items:
+            type: object
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+  responses:
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
