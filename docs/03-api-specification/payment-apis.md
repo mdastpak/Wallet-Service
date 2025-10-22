@@ -37,337 +37,10 @@ Refer to [Idempotency Pattern](../06-design-patterns/idempotency-deduplication.m
 
 ---
 
-## Discount Code APIs
+## Payment Type Details
 
-### 1. Validate Discount Code
-**POST /v1/discounts/validate**
+### PREPAYMENT (Reserve and Capture)
 
-Validates a discount code for a specific user and transaction amount, including eligibility checks.
-
-**Request**:
-```json
-{
-  "code": "VIP50",
-  "amount": 10000,
-  "currency": "USD",
-  "user_id": "user-123"
-}
-```
-
-**Response (Success)**:
-```json
-{
-  "valid": true,
-  "discount_code_id": "disc-001",
-  "code": "VIP50",
-  "discount_type": "PERCENTAGE",
-  "discount_value": 50.00,
-  "discount_amount": 3000,
-  "final_amount": 7000,
-  "eligibility_type": "RESTRICTED",
-  "eligible": true,
-  "message": "Discount code applied successfully"
-}
-```
-
-**Response (Not Eligible)**:
-```json
-{
-  "valid": false,
-  "code": "VIP50",
-  "eligible": false,
-  "error_code": "NOT_ELIGIBLE",
-  "message": "User not eligible for this discount code"
-}
-```
-
-**Response (Other Errors)**:
-```json
-{
-  "valid": false,
-  "code": "EXPIRED20",
-  "error_code": "EXPIRED",
-  "message": "Discount code has expired"
-}
-```
-
-**Error Codes**:
-- `NOT_FOUND`: Discount code does not exist
-- `EXPIRED`: Code has passed expiry date
-- `INACTIVE`: Code status is not ACTIVE
-- `USAGE_LIMIT_REACHED`: Total usage count exceeded
-- `USER_LIMIT_REACHED`: User has used code maximum times
-- `MIN_AMOUNT_NOT_MET`: Transaction amount below minimum
-- `NOT_ELIGIBLE`: User not in eligibility list (for RESTRICTED codes)
-
----
-
-### 2. Create Discount Code (Admin)
-**POST /v1/admin/discounts**
-
-Create a new discount code with optional user-specific eligibility.
-
-**Requires**: `discount:create` scope (Finance Admin role)
-
-**Request (Public Discount)**:
-```json
-{
-  "code": "SUMMER20",
-  "discount_type": "PERCENTAGE",
-  "discount_value": 20.00,
-  "min_amount": 5000,
-  "max_discount": 5000,
-  "expiry_date": "2025-08-31T23:59:59Z",
-  "max_usage": 1000,
-  "max_per_user": 1,
-  "eligibility_type": "ALL_USERS",
-  "description": "Summer sale - 20% off all purchases"
-}
-```
-
-**Request (User-Specific Discount)**:
-```json
-{
-  "code": "VIP50",
-  "discount_type": "PERCENTAGE",
-  "discount_value": 50.00,
-  "min_amount": 0,
-  "max_discount": 10000,
-  "expiry_date": "2025-12-31T23:59:59Z",
-  "max_usage": 100,
-  "max_per_user": 5,
-  "eligibility_type": "RESTRICTED",
-  "description": "VIP customer exclusive - 50% off",
-  "eligibility": [
-    {
-      "eligibility_type": "SPECIFIC_USER",
-      "user_id": "user-john-123"
-    },
-    {
-      "eligibility_type": "SPECIFIC_USER",
-      "user_id": "user-jane-456"
-    },
-    {
-      "eligibility_type": "SPECIFIC_USER",
-      "user_id": "user-bob-789"
-    }
-  ]
-}
-```
-
-**Request (Business-Specific Discount)**:
-```json
-{
-  "code": "ACME25",
-  "discount_type": "PERCENTAGE",
-  "discount_value": 25.00,
-  "min_amount": 0,
-  "max_discount": 50000,
-  "expiry_date": "2025-12-31T23:59:59Z",
-  "max_usage": 500,
-  "max_per_user": 10,
-  "eligibility_type": "RESTRICTED",
-  "description": "Acme Corporation employee discount",
-  "eligibility": [
-    {
-      "eligibility_type": "SPECIFIC_BUSINESS",
-      "business_id": "business-acme-corp"
-    }
-  ]
-}
-```
-
-**Request (Email Domain Discount)**:
-```json
-{
-  "code": "STUDENT10",
-  "discount_type": "PERCENTAGE",
-  "discount_value": 10.00,
-  "min_amount": 0,
-  "max_discount": 2000,
-  "expiry_date": "2025-12-31T23:59:59Z",
-  "max_usage": 10000,
-  "max_per_user": 3,
-  "eligibility_type": "RESTRICTED",
-  "description": "Student discount for .edu emails",
-  "eligibility": [
-    {
-      "eligibility_type": "EMAIL_DOMAIN",
-      "user_email": "@university.edu"
-    },
-    {
-      "eligibility_type": "EMAIL_DOMAIN",
-      "user_email": "@college.edu"
-    }
-  ]
-}
-```
-
-**Response**:
-```json
-{
-  "id": "disc-001",
-  "code": "VIP50",
-  "discount_type": "PERCENTAGE",
-  "discount_value": 50.00,
-  "min_amount": 0,
-  "max_discount": 10000,
-  "expiry_date": "2025-12-31T23:59:59Z",
-  "max_usage": 100,
-  "usage_count": 0,
-  "max_per_user": 5,
-  "eligibility_type": "RESTRICTED",
-  "description": "VIP customer exclusive - 50% off",
-  "status": "ACTIVE",
-  "created_at": "2025-01-15T10:00:00Z",
-  "eligibility_count": 3
-}
-```
-
----
-
-### 3. Add Eligibility to Discount Code (Admin)
-**POST /v1/admin/discounts/{code}/eligibility**
-
-Add additional eligible users/businesses to an existing RESTRICTED discount code.
-
-**Requires**: `discount:manage` scope (Finance Admin role)
-
-**Request**:
-```json
-{
-  "eligibility": [
-    {
-      "eligibility_type": "SPECIFIC_USER",
-      "user_id": "user-new-vip-001"
-    }
-  ]
-}
-```
-
-**Response**:
-```json
-{
-  "discount_code_id": "disc-001",
-  "code": "VIP50",
-  "eligibility_added": 1,
-  "total_eligibility_count": 4
-}
-```
-
----
-
-### 4. Remove Eligibility from Discount Code (Admin)
-**DELETE /v1/admin/discounts/{code}/eligibility/{eligibility_id}**
-
-Remove a specific eligibility rule from a discount code.
-
-**Requires**: `discount:manage` scope (Finance Admin role)
-
-**Response**:
-```json
-{
-  "message": "Eligibility removed successfully",
-  "discount_code_id": "disc-001",
-  "code": "VIP50",
-  "remaining_eligibility_count": 3
-}
-```
-
----
-
-### 5. List Eligible Users for Discount Code (Admin)
-**GET /v1/admin/discounts/{code}/eligibility**
-
-Retrieve all eligibility rules for a discount code.
-
-**Requires**: `discount:view` scope (Finance Admin role)
-
-**Response**:
-```json
-{
-  "discount_code_id": "disc-001",
-  "code": "VIP50",
-  "eligibility_type": "RESTRICTED",
-  "eligibility": [
-    {
-      "id": "elig-001",
-      "eligibility_type": "SPECIFIC_USER",
-      "user_id": "user-john-123",
-      "user_email": "john@example.com",
-      "user_name": "John Doe",
-      "created_at": "2025-01-15T10:00:00Z"
-    },
-    {
-      "id": "elig-002",
-      "eligibility_type": "SPECIFIC_USER",
-      "user_id": "user-jane-456",
-      "user_email": "jane@example.com",
-      "user_name": "Jane Smith",
-      "created_at": "2025-01-15T10:00:00Z"
-    },
-    {
-      "id": "elig-003",
-      "eligibility_type": "SPECIFIC_BUSINESS",
-      "business_id": "business-acme-corp",
-      "business_name": "Acme Corporation",
-      "created_at": "2025-01-16T14:30:00Z"
-    }
-  ]
-}
-```
-
----
-
-### 6. Check User Eligibility (User/Admin)
-**GET /v1/discounts/{code}/eligibility/check**
-
-Check if the authenticated user is eligible for a specific discount code.
-
-**Requires**: `discount:check` scope (User or Admin)
-
-**Query Parameters**:
-- `user_id` (optional, admin only): Check eligibility for a specific user
-
-**Response (Eligible)**:
-```json
-{
-  "code": "VIP50",
-  "eligible": true,
-  "eligibility_type": "RESTRICTED",
-  "matched_rule": {
-    "eligibility_type": "SPECIFIC_USER",
-    "user_id": "user-john-123"
-  },
-  "message": "User is eligible for this discount code"
-}
-```
-
-**Response (Not Eligible)**:
-```json
-{
-  "code": "VIP50",
-  "eligible": false,
-  "eligibility_type": "RESTRICTED",
-  "message": "User is not eligible for this discount code"
-}
-```
-
-**Response (Public Code)**:
-```json
-{
-  "code": "SUMMER20",
-  "eligible": true,
-  "eligibility_type": "ALL_USERS",
-  "message": "This is a public discount code available to all users"
-}
-```
-
----
-
-## Payment with Discount Code Example
-
-### Create Payment with Discount
 **POST /v1/payments**
 
 **Request**:
@@ -378,10 +51,9 @@ Check if the authenticated user is eligible for a specific discount code.
   "destination_wallet_id": "wallet-merchant-456",
   "amount": 10000,
   "currency": "USD",
-  "discount_code": "VIP50",
   "metadata": {
     "order_id": "order-789",
-    "description": "Premium product purchase"
+    "description": "Product purchase"
   }
 }
 ```
@@ -404,64 +76,305 @@ Content-Type: application/json
   "destination_wallet_id": "wallet-merchant-456",
   "amount": 10000,
   "currency": "USD",
-  "discount_code": "VIP50",
-  "discount_code_id": "disc-001",
-  "discount_amount": 3000,
-  "final_amount": 7000,
   "created_at": "2025-01-15T10:30:00Z",
-  "idempotency_key": "550e8400-e29b-41d4-a716-446655440000"
+  "idempotency_key": "550e8400-e29b-41d4-a716-446655440000",
+  "expires_at": "2025-01-15T10:35:00Z"
 }
 ```
 
 **Processing Flow**:
-1. Validate discount code "VIP50" exists and is active
-2. Check user eligibility (user-123 is in SPECIFIC_USER list)
-3. Calculate discount: 50% of $100.00 = $50.00, capped at max_discount $30.00
-4. Final amount: $100.00 - $30.00 = $70.00
-5. Reserve $70.00 from user wallet (not $100.00)
-6. Increment discount usage_count atomically
+1. Validate source wallet has sufficient available balance
+2. Create transaction with status PENDING
+3. Reserve amount from source wallet (increase reserved_amount)
+4. Create RESERVED ledger entries
+5. Set TTL timer (5 minutes default)
+6. Return transaction ID for capture or cancellation
+
+---
+
+### POSTPAYMENT (Invoice and Settle)
+
+**POST /v1/payments**
+
+**Request**:
+```json
+{
+  "payment_type": "POSTPAYMENT",
+  "source_wallet_id": "wallet-user-123",
+  "destination_wallet_id": "wallet-supplier-456",
+  "amount": 50000,
+  "currency": "USD",
+  "metadata": {
+    "invoice_id": "inv-001",
+    "due_date": "2025-02-15",
+    "description": "Net-30 payment"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "id": "tx-002",
+  "payment_type": "POSTPAYMENT",
+  "status": "PENDING",
+  "user_id": "user-123",
+  "amount": 50000,
+  "currency": "USD",
+  "created_at": "2025-01-15T10:30:00Z",
+  "due_date": "2025-02-15T00:00:00Z",
+  "expires_at": "2025-01-15T11:00:00Z"
+}
+```
+
+---
+
+### VALUABLE (High-Value Transactions)
+
+**POST /v1/payments**
+
+**Request**:
+```json
+{
+  "payment_type": "VALUABLE",
+  "source_wallet_id": "wallet-user-123",
+  "destination_wallet_id": "wallet-recipient-456",
+  "amount": 1000000,
+  "currency": "USD",
+  "metadata": {
+    "purpose": "Real estate transaction",
+    "description": "Property purchase payment"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "id": "tx-003",
+  "payment_type": "VALUABLE",
+  "status": "PENDING_APPROVAL",
+  "user_id": "user-123",
+  "amount": 1000000,
+  "currency": "USD",
+  "requires_2fa": true,
+  "requires_compliance_check": true,
+  "created_at": "2025-01-15T10:30:00Z",
+  "expires_at": "2025-01-16T10:30:00Z"
+}
+```
+
+**Processing Flow**:
+1. Require 2FA verification
+2. Perform compliance and fraud checks
+3. Risk scoring and manual review for amounts > $10,000
+4. Extended TTL (24 hours)
+5. Notification to compliance team
+
+---
+
+### CREDIT (Installment Payments)
+
+**POST /v1/payments**
+
+**Request**:
+```json
+{
+  "payment_type": "CREDIT",
+  "destination_wallet_id": "wallet-merchant-456",
+  "amount": 30000,
+  "currency": "USD",
+  "credit_account_id": "credit-user-123",
+  "installment_config": {
+    "total_installments": 6,
+    "frequency": "MONTHLY",
+    "first_due_date": "2025-02-15"
+  },
+  "metadata": {
+    "order_id": "order-credit-789"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "id": "tx-004",
+  "payment_type": "CREDIT",
+  "status": "PENDING",
+  "user_id": "user-123",
+  "amount": 30000,
+  "currency": "USD",
+  "credit_account_id": "credit-user-123",
+  "installment_schedule": {
+    "total_installments": 6,
+    "installment_amount": 5000,
+    "frequency": "MONTHLY",
+    "first_due_date": "2025-02-15T00:00:00Z",
+    "last_due_date": "2025-07-15T00:00:00Z"
+  },
+  "created_at": "2025-01-15T10:30:00Z"
+}
+```
+
+---
+
+## Get Payment Status
+
+**GET /v1/payments/{transaction_id}**
+
+**Response**:
+```json
+{
+  "id": "tx-001",
+  "payment_type": "PREPAYMENT",
+  "status": "CONFIRMED",
+  "user_id": "user-123",
+  "source_wallet_id": "wallet-user-123",
+  "destination_wallet_id": "wallet-merchant-456",
+  "amount": 10000,
+  "currency": "USD",
+  "created_at": "2025-01-15T10:30:00Z",
+  "confirmed_at": "2025-01-15T10:31:00Z",
+  "ledger_entries": [
+    {
+      "wallet_id": "wallet-user-123",
+      "entry_type": "DEBIT",
+      "amount": 10000,
+      "status": "CONFIRMED"
+    },
+    {
+      "wallet_id": "wallet-merchant-456",
+      "entry_type": "CREDIT",
+      "amount": 10000,
+      "status": "CONFIRMED"
+    }
+  ]
+}
+```
+
+---
+
+## Capture Prepayment
+
+**POST /v1/payments/{transaction_id}/capture**
+
+**Request**:
+```json
+{
+  "amount": 10000
+}
+```
+
+**Response**:
+```json
+{
+  "id": "tx-001",
+  "status": "CONFIRMED",
+  "captured_at": "2025-01-15T10:31:00Z",
+  "amount": 10000,
+  "currency": "USD"
+}
+```
+
+**Business Rules**:
+- Can only capture PENDING prepayments
+- Capture amount must be <= reserved amount
+- Partial captures allowed
+- Auto-capture after TTL expires (configurable)
+- Release remaining reserved amount after capture
+
+---
+
+## Rollback Payment
+
+**POST /v1/payments/{transaction_id}/rollback**
+
+**Requires**: `payment:rollback` scope (Finance Admin)
+
+**Request**:
+```json
+{
+  "reason": "Customer requested refund",
+  "metadata": {
+    "refund_request_id": "ref-001",
+    "approved_by": "admin-jane"
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "id": "tx-rollback-001",
+  "original_transaction_id": "tx-001",
+  "status": "ROLLED_BACK",
+  "amount": 10000,
+  "currency": "USD",
+  "rolled_back_at": "2025-01-15T11:00:00Z",
+  "reason": "Customer requested refund"
+}
+```
+
+**Processing Flow**:
+1. Validate original transaction is CONFIRMED
+2. Create reverse transaction with ref_transaction_id
+3. Create reverse ledger entries (DEBIT → CREDIT, CREDIT → DEBIT)
+4. Update original transaction status to ROLLED_BACK
+5. Update wallet balances
+6. Emit rollback event to Kafka
 
 ---
 
 ## Error Responses
 
-### Discount Code Not Found
+### Insufficient Balance
 ```json
 {
-  "error": "DISCOUNT_NOT_FOUND",
-  "message": "Discount code 'INVALID123' does not exist",
-  "status": 404,
+  "error": "INSUFFICIENT_BALANCE",
+  "message": "Wallet does not have sufficient available balance",
+  "status": 400,
+  "timestamp": "2025-01-15T10:30:00Z",
+  "details": {
+    "wallet_id": "wallet-user-123",
+    "available_balance": 5000,
+    "required_amount": 10000,
+    "currency": "USD"
+  }
+}
+```
+
+### Invalid Wallet
+```json
+{
+  "error": "INVALID_WALLET",
+  "message": "Source or destination wallet is invalid or inactive",
+  "status": 400,
   "timestamp": "2025-01-15T10:30:00Z"
 }
 ```
 
-### User Not Eligible
+### Idempotency Key Conflict
 ```json
 {
-  "error": "DISCOUNT_NOT_ELIGIBLE",
-  "message": "User is not eligible to use discount code 'VIP50'",
-  "status": 403,
+  "error": "IDEMPOTENCY_CONFLICT",
+  "message": "Request with this idempotency key already processed",
+  "status": 409,
   "timestamp": "2025-01-15T10:30:00Z",
   "details": {
-    "code": "VIP50",
-    "eligibility_type": "RESTRICTED",
-    "user_id": "user-999"
+    "existing_transaction_id": "tx-001",
+    "idempotency_key": "550e8400-e29b-41d4-a716-446655440000"
   }
 }
 ```
 
-### Usage Limit Reached
+### Transaction Not Found
 ```json
 {
-  "error": "DISCOUNT_USAGE_LIMIT",
-  "message": "Discount code 'SUMMER20' has reached its maximum usage limit",
-  "status": 429,
-  "timestamp": "2025-01-15T10:30:00Z",
-  "details": {
-    "code": "SUMMER20",
-    "max_usage": 1000,
-    "usage_count": 1000
-  }
+  "error": "TRANSACTION_NOT_FOUND",
+  "message": "Transaction with ID 'tx-999' does not exist",
+  "status": 404,
+  "timestamp": "2025-01-15T10:30:00Z"
 }
 ```
 
@@ -469,6 +382,7 @@ Content-Type: application/json
 
 ## Next Steps
 
-- Review [Payment Types](../02-domain-model/payment-types.md) for discount validation logic
-- See [Data Flows](../01-architecture/data-flows.md) for discount application sequence diagrams
-- Explore [Database Schema](../02-domain-model/database-schema.md) for discount code tables
+- Review [Payment Types](../02-domain-model/payment-types.md) for detailed business logic
+- See [Data Flows](../01-architecture/data-flows.md) for sequence diagrams
+- Explore [Database Schema](../02-domain-model/database-schema.md) for transaction and ledger tables
+- Check [Idempotency Pattern](../06-design-patterns/idempotency-deduplication.md) for duplicate protection

@@ -22,7 +22,6 @@ graph TB
         WALLET[Wallet Service]
         PAYMENT[Payment Service]
         AGGREGATE[Aggregation Service]
-        DISCOUNT[Discount Service]
         AUTH[Auth Service]
     end
 
@@ -44,7 +43,6 @@ graph TB
     APIGW --> WALLET
     APIGW --> PAYMENT
     APIGW --> AGGREGATE
-    APIGW --> DISCOUNT
     APIGW --> AUTH
 
     WALLET --> REDIS
@@ -58,9 +56,6 @@ graph TB
 
     AGGREGATE --> REDIS
     AGGREGATE --> ORACLE
-
-    DISCOUNT --> REDIS
-    DISCOUNT --> ORACLE
 
     AUTH --> REDIS
 
@@ -136,19 +131,6 @@ graph TB
 - Handle event-driven incremental updates
 
 **Dependencies**: Oracle DB, Redis Cache, Kafka
-
----
-
-### Discount Service
-**Responsibility**: Promotion and discount code management
-
-**Key Functions**:
-- Validate discount codes
-- Apply discounts to payments
-- Track usage limits and expiry
-- Rollback discount applications
-
-**Dependencies**: Oracle DB, Redis Cache
 
 ---
 

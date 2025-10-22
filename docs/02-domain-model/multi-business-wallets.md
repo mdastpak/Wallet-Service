@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Wallet Service supports **complete wallet segregation** for users who work with multiple businesses. Each user can have independent wallets per business, with separate balances, transactions, and business-specific discount codes.
+The Wallet Service supports **complete wallet segregation** for users who work with multiple businesses. Each user can have independent wallets per business, with separate balances and transactions.
 
 ---
 
@@ -21,7 +21,6 @@ Alice needs:
 ✅ Separate USD wallet for TechStart Inc expenses
 ✅ Personal USD wallet for personal transactions
 ✅ Each wallet with independent balance
-✅ Business-specific discount codes only work for that business's wallet
 ```
 
 ### 2. Employee with Side Business
@@ -50,7 +49,6 @@ Carol is a virtual assistant supporting 5 different businesses:
 Carol needs:
 ✅ 5 separate USD wallets (one per business)
 ✅ Independent balances for each business
-✅ Business-specific discount codes
 ✅ Separate transaction histories per business
 ```
 
@@ -213,195 +211,6 @@ VALUES ('tx-004', 'user-alice', 'wallet-004', 'wallet-006', 50000, 'USD');
 1. Withdraw from Acme wallet to external account
 2. Deposit to TechStart wallet from external account
 3. Or use admin-approved cross-business transfer with audit trail
-
----
-
-## Business-Specific Discount Codes
-
-### Scenario: Business-Specific Discount Applied to Correct Wallet
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Alice
-    participant Payment Service
-    participant Discount Service
-    participant Oracle DB
-
-    Note over Alice: Alice has 3 USD wallets:<br/>Personal, Acme, TechStart
-
-    Alice->>Payment Service: POST /payments<br/>{source_wallet_id: wallet-004 (Acme),<br/>amount: 10000, discount_code: "ACME25"}
-
-    Payment Service->>Discount Service: Validate "ACME25" for user Alice
-
-    Discount Service->>Oracle DB: Load discount code "ACME25"
-    Oracle DB-->>Discount Service: {eligibility_type: SPECIFIC_BUSINESS,<br/>eligible_business_id: biz-acme}
-
-    Discount Service->>Oracle DB: Load source wallet details
-    Oracle DB-->>Discount Service: {wallet_id: wallet-004,<br/>business_id: biz-acme}
-
-    Note over Discount Service: Check eligibility:<br/>wallet.business_id == eligible_business_id<br/>biz-acme == biz-acme ✅
-
-    Discount Service-->>Payment Service: Valid (discount_amount: 2500)
-
-    Payment Service->>Oracle DB: Create transaction<br/>(amount: 10000, discount: 2500, final: 7500)
-    Payment Service-->>Alice: 200 OK {final_amount: $75.00}
-```
-
-### Discount Code Validation Logic
-
-```java
-@Service
-public class BusinessWalletDiscountValidator {
-
-    public DiscountValidationResult validate(String discountCode, UUID walletId, User user, BigDecimal amount) {
-        // Load discount code
-        DiscountCode discount = discountCodeRepository.findByCode(discountCode)
-            .orElseThrow(() -> new DiscountNotFoundException(discountCode));
-
-        // Basic validation (status, expiry, usage limits)
-        validateBasicRules(discount, user, amount);
-
-        // Check eligibility type
-        if (discount.getEligibilityType() == EligibilityType.RESTRICTED) {
-            // Load wallet to get business context
-            Wallet wallet = walletRepository.findById(walletId)
-                .orElseThrow(() -> new WalletNotFoundException(walletId));
-
-            // Load eligibility rules
-            List<DiscountCodeEligibility> eligibilities =
-                eligibilityRepository.findByDiscountCodeId(discount.getId());
-
-            // Check if wallet's business matches any eligibility rule
-            boolean eligible = eligibilities.stream().anyMatch(rule -> {
-                switch (rule.getEligibilityType()) {
-                    case SPECIFIC_BUSINESS:
-                        // Wallet must belong to the eligible business
-                        return wallet.getBusinessId() != null &&
-                               wallet.getBusinessId().equals(rule.getBusinessId());
-
-                    case SPECIFIC_USER:
-                        // User must be in eligible list
-                        return user.getId().equals(rule.getUserId());
-
-                    case EMAIL_DOMAIN:
-                        // User email must match domain
-                        return user.getEmail().endsWith(rule.getUserEmail());
-
-                    case USER_ROLE:
-                        // User must have the role
-                        return user.getRole().equals(rule.getUserEmail());
-
-                    default:
-                        return false;
-                }
-            });
-
-            if (!eligible) {
-                // Check if wallet is personal (business_id = NULL)
-                if (wallet.getBusinessId() == null) {
-                    throw new DiscountNotEligibleException(
-                        "Discount code '" + discountCode + "' is only valid for business wallets"
-                    );
-                } else {
-                    throw new DiscountNotEligibleException(
-                        "Discount code '" + discountCode + "' is not valid for this business wallet. " +
-                        "This code is only available for specific businesses."
-                    );
-                }
-            }
-        }
-
-        // Calculate discount
-        BigDecimal discountAmount = calculateDiscount(discount, amount);
-
-        return DiscountValidationResult.success(discountAmount);
-    }
-}
-```
-
-### Examples
-
-#### Example 1: Valid Business Discount
-
-```http
-POST /v1/payments
-Content-Type: application/json
-Authorization: Bearer {alice_token}
-
-{
-  "source_wallet_id": "wallet-004",  // Acme Corp USD wallet
-  "amount": 10000,                    // $100.00
-  "currency": "USD",
-  "discount_code": "ACME25"           // 25% off for Acme Corp
-}
-
-Response: 200 OK
-{
-  "transaction_id": "tx-005",
-  "amount": 10000,
-  "discount_amount": 2500,            // $25.00 discount
-  "final_amount": 7500,               // $75.00 charged
-  "wallet": {
-    "id": "wallet-004",
-    "business_name": "Acme Corp",
-    "currency": "USD"
-  }
-}
-```
-
-#### Example 2: Invalid Business Discount (Wrong Wallet)
-
-```http
-POST /v1/payments
-Content-Type: application/json
-Authorization: Bearer {alice_token}
-
-{
-  "source_wallet_id": "wallet-006",  // TechStart USD wallet (WRONG!)
-  "amount": 10000,
-  "currency": "USD",
-  "discount_code": "ACME25"           // Only valid for Acme Corp
-}
-
-Response: 403 Forbidden
-{
-  "error": "DISCOUNT_NOT_ELIGIBLE",
-  "message": "Discount code 'ACME25' is not valid for this business wallet. This code is only available for Acme Corp.",
-  "details": {
-    "discount_code": "ACME25",
-    "eligible_business": "Acme Corp",
-    "wallet_business": "TechStart Inc",
-    "suggestion": "Use a TechStart-specific discount code or a public discount code"
-  }
-}
-```
-
-#### Example 3: Personal Wallet Cannot Use Business Discount
-
-```http
-POST /v1/payments
-Content-Type: application/json
-Authorization: Bearer {alice_token}
-
-{
-  "source_wallet_id": "wallet-001",  // Personal USD wallet
-  "amount": 10000,
-  "currency": "USD",
-  "discount_code": "ACME25"
-}
-
-Response: 403 Forbidden
-{
-  "error": "DISCOUNT_NOT_ELIGIBLE",
-  "message": "Discount code 'ACME25' is only valid for business wallets",
-  "details": {
-    "discount_code": "ACME25",
-    "wallet_type": "PERSONAL",
-    "suggestion": "Use a public discount code or apply from a business wallet"
-  }
-}
-```
 
 ---
 
@@ -732,15 +541,13 @@ ON wallets(user_id, COALESCE(business_id, RAW '00000000000000000000000000000000'
 
 - Update wallet creation to include `business_id`
 - Update balance queries to filter by `business_id`
-- Update discount validation to check wallet business context
 
 ---
 
 ## Summary
 
 ✅ **Multi-Business Support**: Users can have separate wallets for each business
-✅ **Complete Segregation**: Independent balances, transactions, and discount eligibility
-✅ **Business-Specific Discounts**: Discount codes validate against wallet business context
+✅ **Complete Segregation**: Independent balances and transactions per business
 ✅ **Flexible Structure**: Supports B2C personal, B2B single business, and multi-business scenarios
 ✅ **Security**: Access control ensures users can only access their wallets in appropriate business contexts
 ✅ **Scalability**: Unique constraint allows unlimited wallets per user across different contexts

@@ -61,39 +61,7 @@ VALUES ('tx-001', 'wallet-b-usd', 'CREDIT', 10000, 'USD');
 
 ---
 
-### Example 2: Payment with Discount
-
-**Scenario**: User A pays $100, gets 20% discount ($20), final payment $80
-
-**Transaction Record**:
-```json
-{
-  "id": "tx-002",
-  "user_id": "user-a",
-  "amount": 10000,
-  "discount_amount": 2000,
-  "final_amount": 8000,
-  "currency": "USD",
-  "discount_code_id": "code-save20"
-}
-```
-
-**Ledger Entries**:
-```sql
--- Debit User A's wallet (final amount after discount)
-INSERT INTO ledger_entries (transaction_id, wallet_id, entry_type, amount)
-VALUES ('tx-002', 'wallet-a-usd', 'DEBIT', 8000);
-
--- Credit Merchant/Business wallet
-INSERT INTO ledger_entries (transaction_id, wallet_id, entry_type, amount)
-VALUES ('tx-002', 'wallet-merchant', 'CREDIT', 8000);
-```
-
-**Note**: Discount is recorded in `transactions.discount_amount` but does not create separate ledger entries.
-
----
-
-### Example 3: Rollback/Refund
+### Example 2: Rollback/Refund
 
 **Scenario**: Rollback transaction tx-001 (User A paid User B $100)
 
@@ -134,7 +102,7 @@ WHERE id = 'tx-001';
 
 ---
 
-### Example 4: Prepayment with Reservation
+### Example 3: Prepayment with Reservation
 
 **Scenario**: User A places order for $50, funds reserved until order confirmed
 

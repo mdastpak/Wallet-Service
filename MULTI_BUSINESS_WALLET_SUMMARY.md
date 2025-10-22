@@ -2,14 +2,13 @@
 
 ## ✅ **Question Answered: YES!**
 
-**User Question**: *"Can user have multi wallet per business with balance, deposit, withdraw and dedicate discount and separated from other same business wallet?"*
+**User Question**: *"Can user have multi wallet per business with balance, deposit, withdraw and separated from other same business wallet?"*
 
 **Answer**: **Absolutely YES!** The Wallet Service now fully supports multi-business wallet segregation with:
 
 ✅ **Multiple wallets per user across different businesses**
 ✅ **Independent balances for each business wallet**
 ✅ **Separate deposit/withdraw operations per business context**
-✅ **Business-specific discount codes**
 ✅ **Complete segregation between business wallets**
 
 ---
@@ -19,7 +18,7 @@
 A user can now have **completely independent wallets** for:
 1. **Personal wallets** (business_id = NULL)
 2. **Multiple business wallets** (one set per business)
-3. **Each business context has separate**: balances, transactions, discounts
+3. **Each business context has separate**: balances, transactions
 
 ### Example: Freelancer Alice
 
@@ -32,12 +31,12 @@ Personal Wallets (business_id = NULL):
 └── BTC Personal Wallet (Balance: 0.5 BTC)
 
 Acme Corp Wallets (business_id = acme-123):
-├── USD Business Wallet (Balance: $10,000) ← Can use "ACME25" discount
-└── EUR Business Wallet (Balance: €7,500)   ← Can use "ACME25" discount
+├── USD Business Wallet (Balance: $10,000)
+└── EUR Business Wallet (Balance: €7,500)
 
 TechStart Wallets (business_id = tech-456):
-├── USD Business Wallet (Balance: $2,500)  ← Can use "TECH10" discount
-└── BTC Business Wallet (Balance: 0.1 BTC)  ← Can use "TECH10" discount
+├── USD Business Wallet (Balance: $2,500)
+└── BTC Business Wallet (Balance: 0.1 BTC)
 
 Total: 7 independent wallets with completely separate balances
 ```
@@ -92,27 +91,7 @@ After withdrawal from Personal:
   TechStart USD: $2,500   (unchanged)
 ```
 
-### 3. Business-Specific Discount Codes
-
-Discount codes validate against **wallet business context**:
-
-```
-Discount "ACME25" (25% off for Acme Corp employees):
-  eligibility_type: SPECIFIC_BUSINESS
-  eligible_business_id: acme-123
-
-When Alice uses "ACME25":
-  ✅ Valid for wallet-004 (Acme Corp USD)
-  ✅ Valid for wallet-005 (Acme Corp EUR)
-  ❌ Invalid for wallet-001 (Personal USD)
-  ❌ Invalid for wallet-006 (TechStart USD)
-
-Error message if used with wrong wallet:
-  "Discount code 'ACME25' is not valid for this business wallet.
-   This code is only available for Acme Corp."
-```
-
-### 4. Complete Segregation
+### 3. Complete Segregation
 
 **Transaction History**:
 - Personal wallet transactions don't mix with business transactions
@@ -244,57 +223,6 @@ Response: 201 Created
 }
 ```
 
-### 3. Payment with Business-Specific Discount
-
-```http
-POST /v1/payments
-Content-Type: application/json
-
-{
-  "source_wallet_id": "wallet-004",  // Acme Corp USD wallet
-  "amount": 10000,                    // $100.00
-  "currency": "USD",
-  "discount_code": "ACME25"           // 25% off for Acme Corp
-}
-
-Response: 200 OK
-{
-  "transaction_id": "tx-001",
-  "amount": 10000,
-  "discount_amount": 2500,            // $25.00 discount
-  "final_amount": 7500,               // $75.00 charged
-  "wallet": {
-    "id": "wallet-004",
-    "business_name": "Acme Corp",
-    "currency": "USD"
-  }
-}
-```
-
-### 4. Error: Discount Used with Wrong Business Wallet
-
-```http
-POST /v1/payments
-Content-Type: application/json
-
-{
-  "source_wallet_id": "wallet-006",  // TechStart USD wallet (WRONG!)
-  "amount": 10000,
-  "discount_code": "ACME25"           // Only for Acme Corp
-}
-
-Response: 403 Forbidden
-{
-  "error": "DISCOUNT_NOT_ELIGIBLE",
-  "message": "Discount code 'ACME25' is not valid for this business wallet. This code is only available for Acme Corp.",
-  "details": {
-    "discount_code": "ACME25",
-    "eligible_business": "Acme Corp",
-    "wallet_business": "TechStart Inc"
-  }
-}
-```
-
 ---
 
 ## 📐 Visual Architecture
@@ -308,19 +236,14 @@ User: Alice
 │   ├── USD Personal Wallet ($5,000)
 │   ├── EUR Personal Wallet (€3,000)
 │   └── BTC Personal Wallet (0.5 BTC)
-│       Eligible for: PUBLIC discounts only
 │
 ├── Acme Corp Context (business_id = acme-123)
 │   ├── USD Business Wallet ($10,000)
-│   │   Eligible for: ACME25, PUBLIC discounts
 │   └── EUR Business Wallet (€7,500)
-│       Eligible for: ACME25, PUBLIC discounts
 │
 └── TechStart Context (business_id = tech-456)
     ├── USD Business Wallet ($2,500)
-    │   Eligible for: TECH10, PUBLIC discounts
     └── BTC Business Wallet (0.1 BTC)
-        Eligible for: TECH10, PUBLIC discounts
 ```
 
 ---
@@ -341,14 +264,7 @@ User: Alice
 - ❌ Cross-business transfers are blocked by default
 - ✅ Admin can approve cross-business transfers with audit
 
-### 3. Discount Codes
-- ✅ `ALL_USERS` discounts work for any wallet
-- ✅ `SPECIFIC_BUSINESS` discounts validate wallet's `business_id`
-- ✅ `SPECIFIC_USER` discounts validate `user_id` (regardless of wallet)
-- ✅ `EMAIL_DOMAIN` discounts validate user's email
-- ✅ `USER_ROLE` discounts validate user's role
-
-### 4. Access Control
+### 3. Access Control
 - ✅ User must own the wallet (`user_id` match)
 - ✅ User must be associated with business (`business_id` match)
 - ✅ Business-specific permissions apply (e.g., `wallet:withdraw`)
@@ -363,7 +279,6 @@ User: Alice
 Alice works for Acme Corp (full-time) and TechStart (part-time)
 - Separate expense accounts for each client
 - Personal wallet for personal finances
-- Business-specific discount codes for corporate purchases
 - Clear separation for tax reporting
 ```
 
@@ -381,7 +296,6 @@ Bob is Finance Manager at GlobalCorp + runs consulting business
 Carol is virtual assistant for 5 businesses
 - 5 separate USD wallets (one per business)
 - Independent balances and transaction histories
-- Business-specific discount eligibility
 - No risk of mixing funds between clients
 ```
 
@@ -403,14 +317,12 @@ Carol is virtual assistant for 5 businesses
 ### 3. **multi-business-wallets.md** (NEW)
 - Complete guide to multi-business wallet feature
 - Use cases, operations, API examples
-- Business-specific discount validation logic
 - Security and access control
 - Best practices and migration guide
 
 ### 4. **PRODUCT_DESIGN.md** (Updated)
 - Enhanced hierarchical data model diagram
 - Multi-business wallet visualization
-- Discount code segregation diagram
 - Key features documentation
 
 ---
@@ -426,19 +338,16 @@ Carol is virtual assistant for 5 businesses
 ### API Changes
 - [ ] Update wallet creation API to accept `business_id`
 - [ ] Enhance wallet listing API with business grouping
-- [ ] Update discount validation to check wallet business context
 - [ ] Add cross-business transfer approval workflow
 
 ### Business Logic
 - [ ] Implement multi-business wallet creation
 - [ ] Update balance calculation to respect business context
-- [ ] Enhance discount eligibility validation
 - [ ] Implement cross-business transfer restrictions
 - [ ] Add access control for business wallets
 
 ### Testing
 - [ ] Unit tests for multi-business wallet operations
-- [ ] Integration tests for business-specific discounts
 - [ ] Access control tests
 - [ ] Cross-business transfer restriction tests
 - [ ] Performance tests with multiple wallets per user
@@ -450,7 +359,6 @@ Carol is virtual assistant for 5 businesses
 ✅ **Flexibility**: Users can work with multiple businesses seamlessly
 ✅ **Security**: Complete segregation prevents fund mixing
 ✅ **Compliance**: Clear audit trail per business context
-✅ **User Experience**: Business-specific discount codes
 ✅ **Scalability**: Supports unlimited businesses per user
 ✅ **Tax Reporting**: Separate transaction histories per business
 
@@ -478,4 +386,4 @@ Carol is virtual assistant for 5 businesses
 
 **Version**: 1.1.0 (Enhanced Multi-Business Wallet Support)
 **Last Updated**: October 2025
-**Feature**: Multi-Business Wallet Segregation with Business-Specific Discounts
+**Feature**: Multi-Business Wallet Segregation

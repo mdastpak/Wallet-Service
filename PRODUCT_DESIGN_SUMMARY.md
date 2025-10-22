@@ -26,18 +26,17 @@ Comprehensive product design visualization document with 30+ Mermaid diagrams co
   - Component Diagram - Payment Service
 
 - ✅ **Domain Model Diagrams**
-  - Complete Entity Relationship Diagram (12 entities)
+  - Complete Entity Relationship Diagram (10 entities)
   - Hierarchical Data Model (B2B/B2C structure)
 
 - ✅ **User Journey Maps** (3 journeys)
-  - Consumer Payment Flow with Discount Code
+  - Consumer Payment Flow
   - Business Employee Expense Payment
   - High-Value Transaction with 2FA
 
-- ✅ **Payment Processing Workflows** (3 workflows)
-  - Standard Payment with Discount (simplified)
+- ✅ **Payment Processing Workflows** (2 workflows)
+  - Standard Payment Flow
   - Payment Type Decision Tree
-  - Discount Code Eligibility Validation
 
 - ✅ **Security Architecture** (3 diagrams)
   - Authentication & Authorization Flow
@@ -48,9 +47,8 @@ Comprehensive product design visualization document with 30+ Mermaid diagrams co
   - Kubernetes Cluster Topology (3 AZs)
   - Horizontal Pod Autoscaling
 
-- ✅ **State Machines** (3 state diagrams)
+- ✅ **State Machines** (2 state diagrams)
   - Transaction Lifecycle State Machine
-  - Discount Code Lifecycle State Machine
   - Wallet Status State Machine
 
 - ✅ **Integration Patterns** (4 diagrams)
@@ -66,39 +64,6 @@ Comprehensive product design visualization document with 30+ Mermaid diagrams co
 - ✅ **Monitoring & Observability** (2 diagrams)
   - Observability Stack (Prometheus/Grafana/ELK/Jaeger)
   - Key Metrics Dashboard
-
----
-
-## Enhanced Discount Code Feature
-
-### Files Updated with Enhanced Design:
-
-1. **docs/02-domain-model/entity-relationships.md**
-   - Added `DISCOUNT_CODE_ELIGIBILITY` entity
-   - Updated ER diagram with new relationships
-   - Added eligibility types: SPECIFIC_USER, SPECIFIC_BUSINESS, EMAIL_DOMAIN, USER_ROLE
-
-2. **docs/02-domain-model/database-schema.md**
-   - Enhanced `discount_codes` table with `eligibility_type` and `description`
-   - Added complete DDL for `discount_code_eligibility` table
-   - Created indexes for optimal performance
-
-3. **docs/02-domain-model/payment-types.md**
-   - Added comprehensive "Discount Code Validation" section
-   - Included complete Java validation code
-   - Added eligibility types table with examples
-   - Updated validation matrix
-
-4. **docs/03-api-specification/payment-apis.md**
-   - Added 6 new discount code API endpoints
-   - Complete request/response examples
-   - Error response documentation
-   - Payment with discount integration example
-
-5. **docs/01-architecture/data-flows.md**
-   - Added Section 8: "Discount Code Validation with Eligibility Check"
-   - Created 6 comprehensive sequence diagrams
-   - Included rollback with usage restoration flow
 
 ---
 
@@ -121,7 +86,7 @@ Global System
 | Category | Technology | Purpose |
 |----------|-----------|---------|
 | **Backend** | Spring Boot 3.x + Java 17 | Application framework |
-| **Database** | Oracle Database 19c | ACID transactions |
+| **Database** | Oracle Database 26ai | ACID transactions |
 | **Cache** | Redis Cluster 7.x | Distributed cache/locks |
 | **Messaging** | Apache Kafka 3.x | Event streaming |
 | **Auth** | OAuth 2.0 + mTLS | Authentication |
@@ -165,29 +130,6 @@ Global System
 - Use cases: BNPL, loan repayments
 - Flow: Create Schedule → Process Monthly
 - Idempotency TTL: 24 hours
-
----
-
-## Discount Code System
-
-### Eligibility Types
-
-| Type | Description | Example |
-|------|-------------|---------|
-| **ALL_USERS** | Public code anyone can use | "SUMMER20" - 20% off |
-| **SPECIFIC_USER** | Only specific users | "VIP50" - For john, jane, bob |
-| **SPECIFIC_BUSINESS** | All employees of a business | "ACME25" - Acme Corp employees |
-| **EMAIL_DOMAIN** | Email pattern matching | "STUDENT10" - @university.edu |
-| **USER_ROLE** | Role-based | "PREMIUM15" - PREMIUM role users |
-
-### Validation Flow
-1. Check code exists and is active
-2. Check expiry date
-3. Check usage limits (global and per-user)
-4. Check minimum amount requirement
-5. **Check eligibility** (if RESTRICTED)
-6. Calculate discount (capped by max_discount)
-7. Apply to transaction
 
 ---
 
@@ -272,19 +214,17 @@ Global System
 
 ## Data Model Summary
 
-### Core Entities (12 tables)
+### Core Entities (10 tables)
 1. **businesses** - Business entities (B2B)
 2. **users** - Individual users (B2C and B2B)
 3. **wallets** - Currency-specific wallets
 4. **transactions** - Immutable transaction records (partitioned)
 5. **ledger_entries** - Double-entry bookkeeping
-6. **discount_codes** - Promotional codes (enhanced)
-7. **discount_code_eligibility** - User-specific eligibility (NEW)
-8. **payment_metadata** - Transaction metadata
-9. **credit_accounts** - Credit limits and balances
-10. **installment_schedules** - Credit payment schedules
-11. **idempotency_keys** - Duplicate protection
-12. **audit_logs** - Immutable audit trail
+6. **payment_metadata** - Transaction metadata
+7. **credit_accounts** - Credit limits and balances
+8. **installment_schedules** - Credit payment schedules
+9. **idempotency_keys** - Duplicate protection
+10. **audit_logs** - Immutable audit trail
 
 ### Database Features
 - **Partitioning**: Monthly range partitioning for transactions
@@ -349,7 +289,6 @@ Global System
   - [ ] Aggregation Service
 
 ### Phase 2: Advanced Features (4 weeks)
-- [ ] Discount code system (enhanced)
 - [ ] Credit/installment payments
 - [ ] High-value transaction workflow
 - [ ] Admin panel APIs
@@ -449,7 +388,6 @@ Global System
 ✅ **Performance** - Tested to 15,000 TPS with <100ms latency
 ✅ **Extensibility** - Modular design, event-driven architecture
 ✅ **Observability** - Comprehensive monitoring and alerting
-✅ **Enhanced Features** - User-specific discount codes with eligibility rules
 
 ---
 

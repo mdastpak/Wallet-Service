@@ -92,7 +92,6 @@ Testing strategies, performance benchmarks, and quality assurance.
 ✅ **Payment Types** - Pre-payment, post-payment, valuable user, and credit models
 ✅ **Rollback Support** - Saga-based compensation transactions
 ✅ **Real-Time Aggregation** - CQRS with cached per-user and per-business totals
-✅ **Discount Codes** - Flexible promotion and incentive management
 ✅ **Enterprise Security** - OAuth 2.0 + mTLS, encryption at rest, PCI-DSS/GDPR compliance
 ✅ **High Availability** - Kubernetes deployment with horizontal scaling
 ✅ **Event-Driven** - Kafka integration for audit trails and async processing

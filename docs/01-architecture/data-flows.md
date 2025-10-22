@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document details the complete data flows for all critical operations in the Wallet Service, including payment processing, rollback handling, balance aggregation, and discount application.
+This document details the complete data flows for all critical operations in the Wallet Service, including payment processing, rollback handling, balance aggregation, and idempotency management.
 
 ---
 
@@ -226,13 +226,6 @@ sequenceDiagram
 
     Rollback Service->>Oracle DB: COMMIT
 
-    Note over Rollback Service,Discount Service: Restore Discount If Applied
-    Rollback Service->>Oracle DB: SELECT discount_code_id<br/>FROM transactions WHERE id=:id
-    alt Discount Was Applied
-        Rollback Service->>Discount Service: POST /discounts/{code}/restore-usage
-        Discount Service->>Oracle DB: UPDATE discount_codes<br/>SET usage_count = usage_count - 1
-    end
-
     Note over Rollback Service,Kafka: Emit Rollback Event
     Rollback Service->>Kafka: Publish TransactionRolledBack Event<br/>{tx_id, rollback_id, amount, reason}
 
@@ -321,56 +314,7 @@ sequenceDiagram
 
 ---
 
-## 4. Discount Code Application Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Payment Service
-    participant Discount Service
-    participant Oracle DB
-    participant Redis
-
-    Client->>Payment Service: POST /v1/payments<br/>{amount: 100, discount_code: "SAVE20"}
-
-    Payment Service->>Discount Service: POST /v1/discounts/validate<br/>{code: "SAVE20", user_id, amount}
-
-    Discount Service->>Redis: GET discount:SAVE20
-
-    alt Cache Hit
-        Discount Service->>Discount Service: Validate from cache
-    else Cache Miss
-        Discount Service->>Oracle DB: SELECT FROM discount_codes<br/>WHERE code='SAVE20'
-        Discount Service->>Redis: SET discount:SAVE20 {data} EX 300
-    end
-
-    Note over Discount Service: Validation Rules
-    Discount Service->>Discount Service: Check active = true
-    Discount Service->>Discount Service: Check expiry_date > NOW()
-    Discount Service->>Discount Service: Check usage_count < max_usage
-    Discount Service->>Oracle DB: SELECT COUNT(*) FROM transactions<br/>WHERE user_id=:id AND discount_code_id=:code_id
-    Discount Service->>Discount Service: Check user usage < max_per_user
-
-    alt Valid
-        Discount Service->>Discount Service: Calculate discount<br/>(e.g., 20% off = $20)
-        Discount Service-->>Payment Service: 200 OK<br/>{valid: true, discount_amount: 20}
-
-        Payment Service->>Oracle DB: BEGIN TRANSACTION
-        Payment Service->>Oracle DB: INSERT transactions<br/>(amount=100, discount=20, final=80,<br/>discount_code_id=:id)
-        Payment Service->>Oracle DB: UPDATE discount_codes<br/>SET usage_count = usage_count + 1<br/>WHERE id=:id
-        Payment Service->>Oracle DB: INSERT ledger_entries<br/>(amount=80)  // Final amount
-        Payment Service->>Oracle DB: COMMIT
-
-        Payment Service-->>Client: 200 OK<br/>{amount: 100, discount: 20, total: 80}
-    else Invalid
-        Discount Service-->>Payment Service: 400 Bad Request<br/>{valid: false, reason: "Code expired"}
-        Payment Service-->>Client: 400 Bad Request<br/>{error: "Invalid discount code"}
-    end
-```
-
----
-
-## 5. Wallet Creation Flow
+## 4. Wallet Creation Flow
 
 ```mermaid
 sequenceDiagram
@@ -409,7 +353,7 @@ sequenceDiagram
 
 ---
 
-## 6. Multi-Currency Balance Query Flow
+## 5. Multi-Currency Balance Query Flow
 
 ```mermaid
 sequenceDiagram
@@ -449,7 +393,7 @@ sequenceDiagram
 
 ---
 
-## 7. Idempotency Key Expiration & Cleanup
+## 6. Idempotency Key Expiration & Cleanup
 
 ```mermaid
 sequenceDiagram
@@ -473,246 +417,6 @@ sequenceDiagram
     end
 
     Cleanup Service->>Oracle DB: DELETE FROM idempotency_keys<br/>WHERE status='EXPIRED'<br/>AND created_at < NOW() - INTERVAL '30 days'
-```
-
----
-
-## 8. Discount Code Validation with Eligibility Check
-
-### 8.1 Public Discount Code Flow (ALL_USERS)
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Payment Service
-    participant Redis Cache
-    participant Oracle DB
-    participant Kafka
-
-    Client->>Payment Service: POST /v1/payments<br/>{amount: 10000, discount_code: "SUMMER20"}
-
-    Note over Payment Service,Redis Cache: Check Discount Code Cache
-    Payment Service->>Redis Cache: GET discount:SUMMER20
-
-    alt Cache Hit
-        Redis Cache-->>Payment Service: {id, type, value, eligibility_type: ALL_USERS}
-    else Cache Miss
-        Payment Service->>Oracle DB: SELECT * FROM discount_codes<br/>WHERE code='SUMMER20'
-        Oracle DB-->>Payment Service: {discount data}
-        Payment Service->>Redis Cache: SET discount:SUMMER20 = {data} EX 3600
-    end
-
-    Note over Payment Service: Validate Discount Code
-    Payment Service->>Payment Service: Check status = ACTIVE
-    Payment Service->>Payment Service: Check expiry_date > NOW()
-    Payment Service->>Payment Service: Check usage_count < max_usage
-    Payment Service->>Payment Service: Check amount >= min_amount
-
-    Note over Payment Service: Check Eligibility
-    Payment Service->>Payment Service: eligibility_type = ALL_USERS<br/>(No eligibility check needed)
-
-    Note over Payment Service: Calculate Discount
-    Payment Service->>Payment Service: discount_amount = amount * 0.20<br/>= 10000 * 0.20 = 2000
-    Payment Service->>Payment Service: discount_amount = MIN(2000, max_discount)
-    Payment Service->>Payment Service: final_amount = 10000 - 2000 = 8000
-
-    Note over Payment Service,Oracle DB: Create Transaction with Discount
-    Payment Service->>Oracle DB: BEGIN TRANSACTION
-    Payment Service->>Oracle DB: INSERT transactions<br/>(amount=10000, discount_code_id, discount_amount=2000, final_amount=8000)
-    Payment Service->>Oracle DB: UPDATE discount_codes<br/>SET usage_count = usage_count + 1<br/>WHERE id = :discount_code_id
-    Payment Service->>Oracle DB: COMMIT
-
-    Payment Service->>Kafka: Publish DiscountApplied Event<br/>{code, user_id, discount_amount}
-
-    Payment Service-->>Client: 200 OK<br/>{tx_id, amount: 10000,<br/>discount_amount: 2000,<br/>final_amount: 8000}
-```
-
-### 8.2 User-Specific Discount Code Flow (RESTRICTED)
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Payment Service
-    participant Redis Cache
-    participant Oracle DB
-    participant Kafka
-
-    Client->>Payment Service: POST /v1/payments<br/>{amount: 10000, discount_code: "VIP50", user_id: "user-123"}
-
-    Note over Payment Service,Redis Cache: Check Discount Code Cache
-    Payment Service->>Redis Cache: GET discount:VIP50
-
-    alt Cache Hit
-        Redis Cache-->>Payment Service: {id, type, value, eligibility_type: RESTRICTED}
-    else Cache Miss
-        Payment Service->>Oracle DB: SELECT * FROM discount_codes<br/>WHERE code='VIP50'
-        Oracle DB-->>Payment Service: {discount data}
-        Payment Service->>Redis Cache: SET discount:VIP50 = {data} EX 3600
-    end
-
-    Note over Payment Service: Basic Validation
-    Payment Service->>Payment Service: Check status = ACTIVE
-    Payment Service->>Payment Service: Check expiry_date > NOW()
-    Payment Service->>Payment Service: Check usage_count < max_usage
-    Payment Service->>Payment Service: Check user_usage < max_per_user
-    Payment Service->>Payment Service: Check amount >= min_amount
-
-    Note over Payment Service,Oracle DB: Check Eligibility (RESTRICTED)
-    Payment Service->>Payment Service: eligibility_type = RESTRICTED<br/>(Must check eligibility)
-
-    Payment Service->>Redis Cache: GET eligibility:VIP50:user-123
-
-    alt Eligibility Cached
-        Redis Cache-->>Payment Service: {eligible: true, matched_rule}
-    else Not Cached
-        Payment Service->>Oracle DB: SELECT * FROM discount_code_eligibility<br/>WHERE discount_code_id = :id
-        Oracle DB-->>Payment Service: [eligibility rules]
-
-        Note over Payment Service: Check Each Eligibility Rule
-        Payment Service->>Payment Service: Check SPECIFIC_USER:<br/>user_id = 'user-123' ✅ MATCH
-
-        Payment Service->>Redis Cache: SET eligibility:VIP50:user-123 = true EX 3600
-    end
-
-    alt User Eligible
-        Note over Payment Service: Calculate Discount
-        Payment Service->>Payment Service: discount_amount = 10000 * 0.50 = 5000
-        Payment Service->>Payment Service: discount_amount = MIN(5000, max_discount=3000)
-        Payment Service->>Payment Service: final_amount = 10000 - 3000 = 7000
-
-        Note over Payment Service,Oracle DB: Create Transaction
-        Payment Service->>Oracle DB: BEGIN TRANSACTION
-        Payment Service->>Oracle DB: INSERT transactions<br/>(amount=10000, discount_code_id,<br/>discount_amount=3000, final_amount=7000)
-        Payment Service->>Oracle DB: UPDATE discount_codes<br/>SET usage_count = usage_count + 1
-        Payment Service->>Oracle DB: COMMIT
-
-        Payment Service->>Kafka: Publish DiscountApplied Event
-
-        Payment Service-->>Client: 200 OK<br/>{tx_id, final_amount: 7000}
-    else User Not Eligible
-        Payment Service-->>Client: 403 Forbidden<br/>{error: "NOT_ELIGIBLE",<br/>message: "User not eligible for VIP50"}
-    end
-```
-
-### 8.3 Business-Specific Discount Code Flow
-
-```mermaid
-sequenceDiagram
-    participant Employee
-    participant Payment Service
-    participant Redis Cache
-    participant Oracle DB
-
-    Employee->>Payment Service: POST /v1/payments<br/>{amount: 10000, discount_code: "ACME25",<br/>user_id: "user-456", business_id: "biz-acme"}
-
-    Note over Payment Service,Oracle DB: Load Discount Code
-    Payment Service->>Oracle DB: SELECT * FROM discount_codes<br/>WHERE code='ACME25'
-    Oracle DB-->>Payment Service: {eligibility_type: RESTRICTED}
-
-    Note over Payment Service,Oracle DB: Check Business Eligibility
-    Payment Service->>Oracle DB: SELECT * FROM discount_code_eligibility<br/>WHERE discount_code_id = :id<br/>AND eligibility_type = 'SPECIFIC_BUSINESS'
-    Oracle DB-->>Payment Service: [{business_id: 'biz-acme'}]
-
-    Payment Service->>Payment Service: User's business_id = 'biz-acme'<br/>✅ MATCH
-
-    Note over Payment Service: Calculate & Apply Discount
-    Payment Service->>Payment Service: discount_amount = 10000 * 0.25 = 2500
-    Payment Service->>Payment Service: final_amount = 10000 - 2500 = 7500
-
-    Payment Service->>Oracle DB: INSERT transactions<br/>(final_amount=7500)
-    Payment Service-->>Employee: 200 OK
-```
-
-### 8.4 Email Domain Discount Code Flow
-
-```mermaid
-sequenceDiagram
-    participant Student
-    participant Payment Service
-    participant Oracle DB
-
-    Student->>Payment Service: POST /v1/payments<br/>{amount: 5000, discount_code: "STUDENT10",<br/>user_email: "alice@university.edu"}
-
-    Note over Payment Service,Oracle DB: Load Eligibility Rules
-    Payment Service->>Oracle DB: SELECT * FROM discount_code_eligibility<br/>WHERE discount_code_id = :id<br/>AND eligibility_type = 'EMAIL_DOMAIN'
-    Oracle DB-->>Payment Service: [{user_email: '@university.edu'},<br/>{user_email: '@college.edu'}]
-
-    Payment Service->>Payment Service: Check email pattern:<br/>'alice@university.edu'.endsWith('@university.edu')<br/>✅ MATCH
-
-    Note over Payment Service: Apply Student Discount
-    Payment Service->>Payment Service: discount_amount = 5000 * 0.10 = 500
-    Payment Service->>Payment Service: final_amount = 5000 - 500 = 4500
-
-    Payment Service->>Oracle DB: INSERT transactions<br/>(final_amount=4500)
-    Payment Service-->>Student: 200 OK
-```
-
-### 8.5 Discount Code Usage Limit Enforcement
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Payment Service
-    participant Oracle DB
-
-    Client->>Payment Service: POST /v1/payments<br/>{discount_code: "LIMITED50"}
-
-    Note over Payment Service,Oracle DB: Check Usage Count (Optimistic Locking)
-    Payment Service->>Oracle DB: BEGIN TRANSACTION
-    Payment Service->>Oracle DB: SELECT usage_count, max_usage, version<br/>FROM discount_codes<br/>WHERE code='LIMITED50' FOR UPDATE
-
-    alt Usage Available
-        Oracle DB-->>Payment Service: {usage_count: 999, max_usage: 1000, version: 42}
-
-        Payment Service->>Payment Service: usage_count (999) < max_usage (1000) ✅
-
-        Note over Payment Service,Oracle DB: Atomic Increment
-        Payment Service->>Oracle DB: UPDATE discount_codes<br/>SET usage_count = usage_count + 1,<br/>version = version + 1<br/>WHERE id = :id AND version = 42
-
-        Payment Service->>Oracle DB: INSERT transactions<br/>(discount_code_id)
-        Payment Service->>Oracle DB: COMMIT
-
-        Payment Service-->>Client: 200 OK
-    else Usage Limit Reached
-        Oracle DB-->>Payment Service: {usage_count: 1000, max_usage: 1000}
-
-        Payment Service->>Oracle DB: ROLLBACK
-        Payment Service-->>Client: 429 Too Many Requests<br/>{error: "USAGE_LIMIT_REACHED"}
-    end
-```
-
-### 8.6 Rollback with Discount Code Usage Restoration
-
-```mermaid
-sequenceDiagram
-    participant Admin
-    participant Rollback Service
-    participant Oracle DB
-    participant Kafka
-
-    Admin->>Rollback Service: POST /v1/payments/{tx_id}/rollback
-
-    Note over Rollback Service,Oracle DB: Load Original Transaction
-    Rollback Service->>Oracle DB: SELECT * FROM transactions<br/>WHERE id = :tx_id
-    Oracle DB-->>Rollback Service: {amount, discount_code_id, discount_amount}
-
-    Rollback Service->>Oracle DB: BEGIN TRANSACTION
-
-    Note over Rollback Service,Oracle DB: Create Compensating Transaction
-    Rollback Service->>Oracle DB: INSERT transactions<br/>(ref_transaction_id=:tx_id,<br/>amount=-10000, discount_amount=-3000,<br/>status=ROLLED_BACK)
-
-    Rollback Service->>Oracle DB: INSERT ledger_entries<br/>(reverse entries)
-
-    Note over Rollback Service,Oracle DB: Restore Discount Usage Count
-    Rollback Service->>Oracle DB: UPDATE discount_codes<br/>SET usage_count = usage_count - 1<br/>WHERE id = :discount_code_id
-
-    Rollback Service->>Oracle DB: UPDATE transactions<br/>SET status=ROLLED_BACK<br/>WHERE id = :tx_id
-
-    Rollback Service->>Oracle DB: COMMIT
-
-    Rollback Service->>Kafka: Publish TransactionRolledBack Event<br/>{tx_id, discount_code_id}
-
-    Rollback Service-->>Admin: 200 OK
 ```
 
 ---

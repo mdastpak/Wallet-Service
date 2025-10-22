@@ -67,10 +67,9 @@ C4Container
         Container(wallet_svc, "Wallet Service", "Spring Boot", "Manages wallet lifecycle and balances")
         Container(payment_svc, "Payment Service", "Spring Boot", "Processes payments and transactions")
         Container(aggregation_svc, "Aggregation Service", "Spring Boot", "Calculates real-time aggregates")
-        Container(discount_svc, "Discount Service", "Spring Boot", "Manages discount codes")
         Container(admin_svc, "Admin Service", "Spring Boot", "Admin operations and reviews")
 
-        ContainerDb(oracle_db, "Oracle Database", "Oracle 19c", "ACID transactional store, partitioned tables")
+        ContainerDb(oracle_db, "Oracle Database", "Oracle Database 26ai", "ACID transactional store, partitioned tables")
         ContainerDb(redis, "Redis Cluster", "Redis 7.x", "Distributed cache, locks, CQRS read models")
         ContainerQueue(kafka, "Kafka Cluster", "Apache Kafka", "Event streaming, audit logs")
     }
@@ -84,7 +83,6 @@ C4Container
     Rel(api_gateway, wallet_svc, "Routes wallet requests", "HTTP/Internal")
     Rel(api_gateway, payment_svc, "Routes payment requests", "HTTP/Internal")
     Rel(api_gateway, aggregation_svc, "Routes aggregation queries", "HTTP/Internal")
-    Rel(api_gateway, discount_svc, "Routes discount requests", "HTTP/Internal")
     Rel(api_gateway, admin_svc, "Routes admin requests", "HTTP/Internal")
 
     Rel(wallet_svc, oracle_db, "Reads/Writes wallet data", "JDBC")
@@ -101,9 +99,6 @@ C4Container
     Rel(aggregation_svc, redis, "Writes aggregated balances", "Redis Protocol")
     Rel(kafka, aggregation_svc, "Consumes transaction events", "Kafka Protocol")
 
-    Rel(discount_svc, oracle_db, "Manages discount codes", "JDBC")
-    Rel(discount_svc, redis, "Caches discount rules", "Redis Protocol")
-
     Rel(admin_svc, oracle_db, "Reviews transactions", "JDBC")
 ```
 
@@ -117,25 +112,20 @@ C4Component
         Component(payment_controller, "Payment Controller", "REST Controller", "Handles HTTP payment requests")
         Component(idempotency_filter, "Idempotency Filter", "Servlet Filter", "Enforces idempotency")
         Component(payment_orchestrator, "Payment Orchestrator", "Service", "Orchestrates payment workflow")
-        Component(discount_validator, "Discount Validator", "Service", "Validates discount codes")
         Component(ledger_writer, "Ledger Writer", "Service", "Creates double-entry ledger entries")
         Component(gateway_client, "Gateway Client", "HTTP Client", "Integrates with payment gateway")
         Component(event_publisher, "Event Publisher", "Kafka Producer", "Publishes domain events")
         Component(rollback_service, "Rollback Service", "Service", "Handles compensation transactions")
     }
 
-    ContainerDb(oracle_db, "Oracle Database", "Transactions, Ledger, Discounts")
-    ContainerDb(redis, "Redis", "Idempotency locks, Discount cache")
+    ContainerDb(oracle_db, "Oracle Database", "Transactions, Ledger")
+    ContainerDb(redis, "Redis", "Idempotency locks, Balance cache")
     ContainerQueue(kafka, "Kafka", "Event stream")
     System_Ext(payment_gateway, "Payment Gateway", "External processor")
 
     Rel(payment_controller, idempotency_filter, "Passes request through")
     Rel(idempotency_filter, redis, "Acquires distributed lock")
     Rel(idempotency_filter, payment_orchestrator, "Invokes if lock acquired")
-
-    Rel(payment_orchestrator, discount_validator, "Validates discount code")
-    Rel(discount_validator, redis, "Checks discount cache")
-    Rel(discount_validator, oracle_db, "Loads eligibility rules")
 
     Rel(payment_orchestrator, ledger_writer, "Creates ledger entries")
     Rel(ledger_writer, oracle_db, "Writes double-entry records")
@@ -158,19 +148,14 @@ C4Component
 
 ```mermaid
 erDiagram
+    BUSINESS ||--o{ BUSINESS : "has_children"
     BUSINESS ||--o{ USER : "employs"
-    BUSINESS ||--o{ BUSINESS_LINE : "has_divisions"
-    BUSINESS_LINE ||--o{ WALLET : "segregates"
+    BUSINESS ||--o{ WALLET : "contains"
     USER ||--o{ WALLET : "owns"
     WALLET ||--o{ LEDGER_ENTRY : "records"
     TRANSACTION ||--o{ LEDGER_ENTRY : "contains"
     USER ||--o{ TRANSACTION : "initiates"
     BUSINESS ||--o{ TRANSACTION : "processes"
-    DISCOUNT_CODE ||--o{ TRANSACTION : "applies_to"
-    DISCOUNT_CODE ||--o{ DISCOUNT_CODE_ELIGIBILITY : "has_eligibility"
-    DISCOUNT_CODE_ELIGIBILITY }o--o| USER : "specific_user"
-    DISCOUNT_CODE_ELIGIBILITY }o--o| BUSINESS : "specific_business"
-    DISCOUNT_CODE_ELIGIBILITY }o--o| BUSINESS_LINE : "specific_business_line"
     TRANSACTION ||--o| TRANSACTION : "rollback_of"
     TRANSACTION ||--o{ PAYMENT_METADATA : "has"
     USER ||--o{ CREDIT_ACCOUNT : "holds"
@@ -179,23 +164,19 @@ erDiagram
 
     BUSINESS {
         uuid id PK
+        uuid parent_id FK
         string name
+        string code
         string business_type
         string tax_id
         string country
-        timestamp created_at
-        string status
-    }
-
-    BUSINESS_LINE {
-        uuid id PK
-        uuid business_id FK
-        string name
-        string code
+        string email
+        string phone
         string description
         boolean is_active
         timestamp created_at
         timestamp updated_at
+        string status
     }
 
     USER {
@@ -205,22 +186,24 @@ erDiagram
         string encrypted_phone
         string full_name
         string role
-        timestamp created_at
-        string status
         string kyc_status
+        timestamp kyc_verified_at
+        timestamp created_at
+        timestamp updated_at
+        string status
     }
 
     WALLET {
         uuid id PK
         uuid user_id FK
         uuid business_id FK
-        uuid business_line_id FK
         string currency
         string wallet_type
         string wallet_name
         bigint reserved_amount
         boolean is_active
         timestamp created_at
+        timestamp updated_at
         string status
         int version
     }
@@ -236,12 +219,11 @@ erDiagram
         string payment_type
         string status
         string idempotency_key
-        uuid discount_code_id FK
-        bigint discount_amount
-        bigint final_amount
         uuid ref_transaction_id FK
         string gateway_transaction_id
+        string correlation_id
         timestamp created_at
+        timestamp updated_at
         int version
     }
 
@@ -256,35 +238,6 @@ erDiagram
         string status
     }
 
-    DISCOUNT_CODE {
-        uuid id PK
-        string code
-        string discount_type
-        decimal discount_value
-        bigint min_amount
-        bigint max_discount
-        timestamp expiry_date
-        int max_usage
-        int usage_count
-        int max_per_user
-        string eligibility_type
-        string description
-        timestamp created_at
-        string status
-        int version
-    }
-
-    DISCOUNT_CODE_ELIGIBILITY {
-        uuid id PK
-        uuid discount_code_id FK
-        uuid user_id FK
-        uuid business_id FK
-        uuid business_line_id FK
-        string eligibility_type
-        string user_email
-        timestamp created_at
-    }
-
     PAYMENT_METADATA {
         uuid id PK
         uuid transaction_id FK
@@ -297,34 +250,30 @@ erDiagram
         uuid id PK
         uuid user_id FK
         bigint credit_limit
-        bigint available_credit
         bigint outstanding_balance
+        decimal interest_rate
+        int grace_period_days
         timestamp created_at
-        int version
+        timestamp updated_at
+        string status
     }
 
     INSTALLMENT_SCHEDULE {
         uuid id PK
         uuid transaction_id FK
-        int total_installments
-        int paid_installments
+        int installment_number
         bigint installment_amount
-        string frequency
-        timestamp next_due_date
-        timestamp created_at
+        timestamp due_date
+        timestamp paid_at
         string status
+        timestamp created_at
     }
 
     IDEMPOTENCY_KEY {
-        uuid id PK
-        string key
-        uuid user_id FK
-        string endpoint
-        string status
-        text cached_response
+        string key PK
+        uuid transaction_id FK
         timestamp created_at
         timestamp expires_at
-        int ttl_minutes
     }
 ```
 
@@ -346,38 +295,15 @@ graph TB
     PERSONAL --> P2[EUR Personal Wallet<br/>Balance: €3,000<br/>wallet_name: Personal Euro]
     PERSONAL --> P3[BTC Personal Wallet<br/>Balance: 0.5 BTC<br/>wallet_name: Personal Bitcoin]
 
-    ACME --> A1[USD Business Wallet<br/>Balance: $10,000<br/>wallet_name: Acme Corp USD<br/>Discount: ACME25 eligible ✅]
-    ACME --> A2[EUR Business Wallet<br/>Balance: €7,500<br/>wallet_name: Acme Corp EUR<br/>Discount: ACME25 eligible ✅]
+    ACME --> A1[USD Business Wallet<br/>Balance: $10,000<br/>wallet_name: Acme Corp USD]
+    ACME --> A2[EUR Business Wallet<br/>Balance: €7,500<br/>wallet_name: Acme Corp EUR]
 
-    TECH --> T1[USD Business Wallet<br/>Balance: $2,500<br/>wallet_name: TechStart USD<br/>Discount: TECH10 eligible ✅]
-    TECH --> T2[BTC Business Wallet<br/>Balance: 0.1 BTC<br/>wallet_name: TechStart BTC<br/>Discount: TECH10 eligible ✅]
-
-    subgraph "Discount Code Segregation"
-        DISC1[ACME25: 25% off<br/>SPECIFIC_BUSINESS<br/>business_id = acme-123]
-        DISC2[TECH10: 10% off<br/>SPECIFIC_BUSINESS<br/>business_id = tech-456]
-        DISC3[PUBLIC20: 20% off<br/>ALL_USERS<br/>Works for all wallets]
-    end
-
-    DISC1 -.Valid for.-> A1
-    DISC1 -.Valid for.-> A2
-    DISC1 -.NOT valid.-> P1
-    DISC1 -.NOT valid.-> T1
-
-    DISC2 -.Valid for.-> T1
-    DISC2 -.Valid for.-> T2
-    DISC2 -.NOT valid.-> A1
-    DISC2 -.NOT valid.-> P1
-
-    DISC3 -.Valid for.-> P1
-    DISC3 -.Valid for.-> A1
-    DISC3 -.Valid for.-> T1
+    TECH --> T1[USD Business Wallet<br/>Balance: $2,500<br/>wallet_name: TechStart USD]
+    TECH --> T2[BTC Business Wallet<br/>Balance: 0.1 BTC<br/>wallet_name: TechStart BTC]
 
     style PERSONAL fill:#fff4e1
     style ACME fill:#e1f5ff
     style TECH fill:#e8f4f8
-    style DISC1 fill:#ffe4e1
-    style DISC2 fill:#e8ffe8
-    style DISC3 fill:#f0e8ff
 ```
 
 ### Key Features of Multi-Business Wallets
@@ -387,10 +313,10 @@ graph TB
 - Each wallet has separate balance, transactions, and history
 - Personal wallets (business_id = NULL) are independent from business wallets
 
-**✅ Business-Specific Discounts**
-- "ACME25" only works for Acme Corp wallets (A1, A2)
-- "TECH10" only works for TechStart wallets (T1, T2)
-- "PUBLIC20" works for all wallets
+**✅ Business-Specific Operations**
+- Each business wallet operates independently
+- Separate accounting and reporting per business
+- Multi-currency support per business context
 
 **✅ Unique Constraint**
 - `(user_id, business_id, currency, wallet_type)` must be unique
@@ -465,7 +391,7 @@ graph TB
 
 ```mermaid
 journey
-    title Consumer Payment Journey - PREPAYMENT with Discount Code
+    title Consumer Payment Journey - PREPAYMENT
 
     section Registration & Setup
         Sign up with email: 5: Consumer
@@ -475,12 +401,10 @@ journey
     section Browse & Select
         Browse products: 5: Consumer
         Add items to cart: 5: Consumer
-        Apply discount code VIP50: 4: Consumer, System
-        View discounted price: 5: Consumer
+        View cart total: 5: Consumer
 
     section Payment
         Initiate payment: 5: Consumer
-        System validates discount eligibility: 3: System
         System reserves funds: 3: System
         Receive payment confirmation: 5: Consumer
 
@@ -508,7 +432,6 @@ journey
 
     section Expense Submission
         Employee submits expense claim: 4: Employee
-        Apply business discount code: 5: Employee, System
         System checks credit limit: 3: System
         Create invoice (Net-30): 4: System
 
@@ -558,7 +481,7 @@ journey
 
 ## Payment Processing Workflows
 
-### Workflow 1: Standard Payment with Discount (Simplified)
+### Workflow 1: Standard Payment Processing
 
 ```mermaid
 flowchart TD
@@ -566,15 +489,7 @@ flowchart TD
     CHECK_AUTH -->|No| AUTH_FAIL[Return 401 Unauthorized]
     CHECK_AUTH -->|Yes| PARSE_REQUEST[Parse Payment Request]
 
-    PARSE_REQUEST --> HAS_DISCOUNT{Has Discount<br/>Code?}
-
-    HAS_DISCOUNT -->|Yes| VALIDATE_DISCOUNT[Validate Discount Code]
-    VALIDATE_DISCOUNT --> CHECK_ELIGIBILITY{User<br/>Eligible?}
-    CHECK_ELIGIBILITY -->|No| DISCOUNT_FAIL[Return 403 Not Eligible]
-    CHECK_ELIGIBILITY -->|Yes| CALC_DISCOUNT[Calculate Discount Amount]
-    CALC_DISCOUNT --> CHECK_BALANCE
-
-    HAS_DISCOUNT -->|No| CHECK_BALANCE{Sufficient<br/>Balance?}
+    PARSE_REQUEST --> CHECK_BALANCE{Sufficient<br/>Balance?}
 
     CHECK_BALANCE -->|No| BALANCE_FAIL[Return 402 Insufficient Funds]
     CHECK_BALANCE -->|Yes| ACQUIRE_LOCK[Acquire Idempotency Lock]
@@ -585,8 +500,7 @@ flowchart TD
 
     BEGIN_TX --> CREATE_TX[Create Transaction Record]
     CREATE_TX --> CREATE_LEDGER[Create Ledger Entries<br/>Debit + Credit]
-    CREATE_LEDGER --> UPDATE_DISCOUNT[Update Discount Usage Count]
-    UPDATE_DISCOUNT --> COMMIT_TX[COMMIT TRANSACTION]
+    CREATE_LEDGER --> COMMIT_TX[COMMIT TRANSACTION]
 
     COMMIT_TX --> CALL_GATEWAY{External<br/>Gateway?}
     CALL_GATEWAY -->|Yes| GATEWAY_CALL[Call Payment Gateway]
@@ -601,7 +515,6 @@ flowchart TD
     CACHE_RESPONSE --> SUCCESS([Return 200 OK])
 
     AUTH_FAIL --> END([End])
-    DISCOUNT_FAIL --> END
     BALANCE_FAIL --> END
     RETURN_CACHED --> END
     GATEWAY_FAIL --> END
@@ -610,7 +523,6 @@ flowchart TD
     style START fill:#d4edda
     style SUCCESS fill:#d4edda
     style AUTH_FAIL fill:#f8d7da
-    style DISCOUNT_FAIL fill:#f8d7da
     style BALANCE_FAIL fill:#f8d7da
     style GATEWAY_FAIL fill:#f8d7da
 ```
@@ -676,78 +588,6 @@ flowchart TD
     style VAL_FAIL fill:#f8d7da
     style VAL_KYC_FAIL fill:#f8d7da
     style VAL_2FA_FAIL fill:#f8d7da
-```
-
-### Workflow 3: Discount Code Eligibility Validation
-
-```mermaid
-flowchart TD
-    START([Validate Discount Code]) --> LOAD_CODE[Load Discount Code]
-    LOAD_CODE --> EXISTS{Code<br/>Exists?}
-    EXISTS -->|No| NOT_FOUND[Error: Code Not Found]
-    EXISTS -->|Yes| CHECK_STATUS{Status<br/>ACTIVE?}
-
-    CHECK_STATUS -->|No| INACTIVE[Error: Code Inactive]
-    CHECK_STATUS -->|Yes| CHECK_EXPIRY{Expiry Date<br/>> Now?}
-
-    CHECK_EXPIRY -->|No| EXPIRED[Error: Code Expired]
-    CHECK_EXPIRY -->|Yes| CHECK_USAGE{Usage Count<br/>< Max Usage?}
-
-    CHECK_USAGE -->|No| USAGE_LIMIT[Error: Usage Limit Reached]
-    CHECK_USAGE -->|Yes| CHECK_USER_USAGE{User Usage<br/>< Max Per User?}
-
-    CHECK_USER_USAGE -->|No| USER_LIMIT[Error: User Limit Reached]
-    CHECK_USER_USAGE -->|Yes| CHECK_MIN_AMOUNT{Amount >=<br/>Min Amount?}
-
-    CHECK_MIN_AMOUNT -->|No| MIN_AMOUNT[Error: Below Min Amount]
-    CHECK_MIN_AMOUNT -->|Yes| CHECK_ELIG_TYPE{Eligibility<br/>Type?}
-
-    CHECK_ELIG_TYPE -->|ALL_USERS| CALC_DISCOUNT[Calculate Discount Amount]
-    CHECK_ELIG_TYPE -->|RESTRICTED| LOAD_ELIGIBILITY[Load Eligibility Rules]
-
-    LOAD_ELIGIBILITY --> CHECK_RULES{Any Rule<br/>Matches?}
-    CHECK_RULES -->|No| NOT_ELIGIBLE[Error: User Not Eligible]
-    CHECK_RULES -->|Yes| MATCH_TYPE{Which Type?}
-
-    MATCH_TYPE -->|SPECIFIC_USER| CHECK_USER[User ID Matches?]
-    MATCH_TYPE -->|SPECIFIC_BUSINESS| CHECK_BUSINESS[Business ID Matches?]
-    MATCH_TYPE -->|EMAIL_DOMAIN| CHECK_EMAIL[Email Ends With Domain?]
-    MATCH_TYPE -->|USER_ROLE| CHECK_ROLE[User Has Role?]
-
-    CHECK_USER -->|Yes| CALC_DISCOUNT
-    CHECK_BUSINESS -->|Yes| CALC_DISCOUNT
-    CHECK_EMAIL -->|Yes| CALC_DISCOUNT
-    CHECK_ROLE -->|Yes| CALC_DISCOUNT
-
-    CHECK_USER -->|No| NOT_ELIGIBLE
-    CHECK_BUSINESS -->|No| NOT_ELIGIBLE
-    CHECK_EMAIL -->|No| NOT_ELIGIBLE
-    CHECK_ROLE -->|No| NOT_ELIGIBLE
-
-    CALC_DISCOUNT --> APPLY_CAP{Discount ><br/>Max Discount?}
-    APPLY_CAP -->|Yes| CAP_DISCOUNT[Apply Max Discount Cap]
-    APPLY_CAP -->|No| USE_CALCULATED[Use Calculated Discount]
-
-    CAP_DISCOUNT --> SUCCESS([Return Valid Discount])
-    USE_CALCULATED --> SUCCESS
-
-    NOT_FOUND --> END([Validation Failed])
-    INACTIVE --> END
-    EXPIRED --> END
-    USAGE_LIMIT --> END
-    USER_LIMIT --> END
-    MIN_AMOUNT --> END
-    NOT_ELIGIBLE --> END
-
-    style START fill:#d4edda
-    style SUCCESS fill:#d4edda
-    style NOT_FOUND fill:#f8d7da
-    style INACTIVE fill:#f8d7da
-    style EXPIRED fill:#f8d7da
-    style USAGE_LIMIT fill:#f8d7da
-    style USER_LIMIT fill:#f8d7da
-    style MIN_AMOUNT fill:#f8d7da
-    style NOT_ELIGIBLE fill:#f8d7da
 ```
 
 ---
@@ -1055,41 +895,7 @@ stateDiagram-v2
 
     note right of ROLLED_BACK
         Compensation transaction
-        created, funds restored,
-        discount usage decremented
-    end note
-```
-
-### Discount Code Lifecycle State Machine
-
-```mermaid
-stateDiagram-v2
-    [*] --> DRAFT: Admin Creates Code
-
-    DRAFT --> ACTIVE: Admin Activates
-    DRAFT --> DELETED: Admin Deletes
-
-    ACTIVE --> ACTIVE: User Applies (usage_count++)
-    ACTIVE --> EXPIRED: Expiry Date Reached
-    ACTIVE --> EXHAUSTED: Usage Limit Reached
-    ACTIVE --> INACTIVE: Admin Deactivates
-
-    INACTIVE --> ACTIVE: Admin Reactivates
-    INACTIVE --> DELETED: Admin Deletes
-
-    EXPIRED --> [*]
-    EXHAUSTED --> [*]
-    DELETED --> [*]
-
-    note right of ACTIVE
-        Can be used by eligible users
-        Usage count incremented
-        On rollback - count decremented
-    end note
-
-    note right of EXHAUSTED
-        usage_count greater than max_usage
-        Cannot be reactivated
+        created, funds restored
     end note
 ```
 
@@ -1303,9 +1109,8 @@ graph TB
 
     subgraph "Cached Data Types"
         BALANCE[Wallet Balances<br/>TTL: 5 min]
-        DISCOUNT[Discount Codes<br/>TTL: 1 hour]
-        ELIGIBILITY[Discount Eligibility<br/>TTL: 1 hour]
         USER[User Profile<br/>TTL: 30 min]
+        BUSINESS[Business Info<br/>TTL: 1 hour]
     end
 
     subgraph "Cache Patterns"
@@ -1318,9 +1123,8 @@ graph TB
     L1 -.Miss.-> L2
     L2 -.Miss.-> L3
 
-    DISCOUNT --> L2
-    ELIGIBILITY --> L2
     USER --> L2
+    BUSINESS --> L2
 
     L3 --> WRITE_THROUGH
     WRITE_THROUGH --> L2
@@ -1354,7 +1158,7 @@ graph TB
     end
 
     subgraph "Global Data"
-        GLOBAL[(Global Shard<br/>Businesses, Discounts)]
+        GLOBAL[(Global Shard<br/>Businesses, Config)]
     end
 
     APP --> ROUTER
@@ -1364,7 +1168,7 @@ graph TB
     HASH -.user_id=1500.-> SHARD2
     HASH -.user_id=2700.-> SHARD3
 
-    ROUTER -.Business/Discount Queries.-> GLOBAL
+    ROUTER -.Business/Config Queries.-> GLOBAL
 
     style SHARD1 fill:#e1f5ff
     style SHARD2 fill:#e1f5ff
@@ -1451,7 +1255,7 @@ graph TB
     subgraph "Business Metrics"
         TPS[Transactions/sec<br/>Target: >10,000]
         SUCCESS_RATE[Success Rate<br/>Target: >99.9%]
-        DISCOUNT_USAGE[Discount Usage<br/>Applied/Total]
+        AVG_TX_VALUE[Avg Transaction Value<br/>USD]
         REVENUE[GMV<br/>Gross Merchandise Value]
     end
 
@@ -1490,7 +1294,7 @@ This product design document provides comprehensive visualizations of the Wallet
 ✅ **Payment Workflows** - Decision trees and process flows for all payment types
 ✅ **Security Architecture** - Authentication, encryption, and PCI-DSS compliance
 ✅ **Deployment Architecture** - Kubernetes topology and autoscaling
-✅ **State Machines** - Transaction, discount, and wallet lifecycle states
+✅ **State Machines** - Transaction and wallet lifecycle states
 ✅ **Integration Patterns** - Event-driven, circuit breaker, CQRS, and idempotency
 ✅ **Performance** - Caching strategies and sharding (future)
 ✅ **Observability** - Metrics, logging, tracing, and alerting

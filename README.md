@@ -7,14 +7,13 @@
 
 ## 🎯 Overview
 
-Enterprise-grade, multi-tenant financial platform supporting **B2B** and **B2C** transaction models with comprehensive wallet management, payment processing, and discount code functionality.
+Enterprise-grade, multi-tenant financial platform supporting **B2B** and **B2C** transaction models with comprehensive wallet management and payment processing.
 
 ### Key Capabilities
 
 ✅ **Multi-Tenant Architecture** - Hierarchical business → users → wallets structure
 ✅ **Double-Entry Ledger** - Immutable transaction records with ACID guarantees
 ✅ **4 Payment Types** - PREPAYMENT, POSTPAYMENT, VALUABLE, CREDIT
-✅ **Enhanced Discount Codes** - User-specific eligibility with 5 eligibility types
 ✅ **Idempotency Protection** - Redis distributed locks + Oracle constraints
 ✅ **Real-Time Aggregation** - CQRS with cached balances
 ✅ **Event-Driven Architecture** - Kafka integration for audit and async processing
@@ -94,14 +93,13 @@ The **[PRODUCT_DESIGN.md](./docs/PRODUCT_DESIGN.md)** document includes:
 - ✅ Hierarchical Data Model (B2B/B2C)
 
 #### User Journeys
-- ✅ Consumer Payment with Discount Code
+- ✅ Consumer Payment Flow
 - ✅ Business Employee Expense Payment
 - ✅ High-Value Transaction with 2FA
 
 #### Workflows
 - ✅ Standard Payment Processing
 - ✅ Payment Type Decision Tree
-- ✅ Discount Code Eligibility Validation
 
 #### Security
 - ✅ Authentication & Authorization Flow
@@ -114,7 +112,6 @@ The **[PRODUCT_DESIGN.md](./docs/PRODUCT_DESIGN.md)** document includes:
 
 #### State Machines
 - ✅ Transaction Lifecycle
-- ✅ Discount Code Lifecycle
 - ✅ Wallet Status Lifecycle
 
 #### Integrations
@@ -170,16 +167,6 @@ graph TB
 | **VALUABLE** | High-value with enhanced security | Transactions > $10K | 24 hours |
 | **CREDIT** | Installment payments | BNPL, loan repayments | 24 hours |
 
-### Enhanced Discount Code System
-
-| Eligibility Type | Description | Example |
-|------------------|-------------|---------|
-| **ALL_USERS** | Public code | "SUMMER20" - 20% off for everyone |
-| **SPECIFIC_USER** | Individual users | "VIP50" - Only john, jane, bob |
-| **SPECIFIC_BUSINESS** | All business employees | "ACME25" - Acme Corp employees |
-| **EMAIL_DOMAIN** | Email pattern | "STUDENT10" - @university.edu |
-| **USER_ROLE** | Role-based | "PREMIUM15" - PREMIUM role users |
-
 ---
 
 ## 🛠️ Technology Stack
@@ -188,7 +175,7 @@ graph TB
 |----------|-----------|---------|---------|
 | **Language** | Java | 17 LTS | Application runtime |
 | **Framework** | Spring Boot | 3.2+ | Application framework |
-| **Database** | Oracle Database | 19c Enterprise | ACID transactional store |
+| **Database** | Oracle Database | 26ai Enterprise | ACID transactional store |
 | **Cache** | Redis Cluster | 7.x | Distributed cache/locks |
 | **Messaging** | Apache Kafka | 3.x | Event streaming |
 | **Auth** | OAuth 2.0 + mTLS | - | Authentication |
@@ -382,12 +369,10 @@ Command Side (Write)          Event Bus           Query Side (Read)
 - [x] Database schema (Oracle DDL)
 - [x] API specification (OpenAPI 3.0)
 - [x] Security architecture design
-- [x] Enhanced discount code design
 - [ ] Core service implementation
 - [ ] Unit and integration tests
 
 ### Phase 2: Advanced Features (4 weeks)
-- [ ] Discount code system (enhanced eligibility)
 - [ ] Credit/installment payment processing
 - [ ] High-value transaction workflow (2FA + risk scoring)
 - [ ] Admin panel APIs
@@ -485,18 +470,11 @@ Command Side (Write)          Event Bus           Query Side (Read)
 
 ## 🎉 What's New in This Release
 
-### ⭐ Enhanced Discount Code System
-- **5 Eligibility Types**: ALL_USERS, SPECIFIC_USER, SPECIFIC_BUSINESS, EMAIL_DOMAIN, USER_ROLE
-- **New Database Table**: `discount_code_eligibility` with complete DDL
-- **Enhanced Validation**: Comprehensive eligibility checking logic
-- **New APIs**: 6 new endpoints for discount management
-- **Updated Flows**: 6 new sequence diagrams in data-flows.md
-
 ### ⭐ Product Design Documentation
 - **30+ Mermaid Diagrams**: Complete visual system design
 - **C4 Architecture Model**: Context, Container, Component diagrams
 - **User Journey Maps**: 3 comprehensive journey flows
-- **State Machines**: Transaction, discount, and wallet lifecycles
+- **State Machines**: Transaction and wallet lifecycles
 - **Integration Patterns**: Event-driven, circuit breaker, CQRS, idempotency
 
 ### ⭐ Complete Documentation Suite

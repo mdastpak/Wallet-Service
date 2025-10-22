@@ -124,7 +124,7 @@ docs/
 |----------|-----------|---------|
 | **Language** | Java 17 LTS | Application runtime |
 | **Framework** | Spring Boot 3.2 | Application framework |
-| **Database** | Oracle 19c Enterprise | ACID transactional store |
+| **Database** | Oracle Database 26ai Enterprise | ACID transactional store |
 | **Cache** | Redis Cluster 7.x | Distributed cache/locks |
 | **Messaging** | Apache Kafka 3.x | Event streaming |
 | **Auth** | OAuth 2.0 + mTLS | Authentication/authorization |
@@ -156,7 +156,6 @@ docs/
 - **transactions**: Immutable transaction records (partitioned by month)
 - **ledger_entries**: Double-entry bookkeeping records
 - **idempotency_keys**: Duplicate protection with TTL
-- **discount_codes**: Promotional codes
 - **installment_schedules**: Credit payment amortization
 
 ### Key Indexes
@@ -188,9 +187,6 @@ docs/
 - `GET /v1/aggregates/users/{id}/balance` - User total balance
 - `GET /v1/aggregates/businesses/{id}/balance` - Business total balance
 - `GET /v1/aggregates/global/balance` - System-wide balance (admin)
-
-### Discounts
-- `POST /v1/discounts/validate` - Validate discount code
 
 ---
 
