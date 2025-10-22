@@ -1109,9 +1109,8 @@ graph TB
 
     subgraph "Cached Data Types"
         BALANCE[Wallet Balances<br/>TTL: 5 min]
-        DISCOUNT[Discount Codes<br/>TTL: 1 hour]
-        ELIGIBILITY[Discount Eligibility<br/>TTL: 1 hour]
         USER[User Profile<br/>TTL: 30 min]
+        BUSINESS[Business Info<br/>TTL: 1 hour]
     end
 
     subgraph "Cache Patterns"
@@ -1124,9 +1123,8 @@ graph TB
     L1 -.Miss.-> L2
     L2 -.Miss.-> L3
 
-    DISCOUNT --> L2
-    ELIGIBILITY --> L2
     USER --> L2
+    BUSINESS --> L2
 
     L3 --> WRITE_THROUGH
     WRITE_THROUGH --> L2
@@ -1160,7 +1158,7 @@ graph TB
     end
 
     subgraph "Global Data"
-        GLOBAL[(Global Shard<br/>Businesses, Discounts)]
+        GLOBAL[(Global Shard<br/>Businesses, Config)]
     end
 
     APP --> ROUTER
@@ -1170,7 +1168,7 @@ graph TB
     HASH -.user_id=1500.-> SHARD2
     HASH -.user_id=2700.-> SHARD3
 
-    ROUTER -.Business/Discount Queries.-> GLOBAL
+    ROUTER -.Business/Config Queries.-> GLOBAL
 
     style SHARD1 fill:#e1f5ff
     style SHARD2 fill:#e1f5ff
@@ -1257,7 +1255,7 @@ graph TB
     subgraph "Business Metrics"
         TPS[Transactions/sec<br/>Target: >10,000]
         SUCCESS_RATE[Success Rate<br/>Target: >99.9%]
-        DISCOUNT_USAGE[Discount Usage<br/>Applied/Total]
+        AVG_TX_VALUE[Avg Transaction Value<br/>USD]
         REVENUE[GMV<br/>Gross Merchandise Value]
     end
 
@@ -1296,7 +1294,7 @@ This product design document provides comprehensive visualizations of the Wallet
 ✅ **Payment Workflows** - Decision trees and process flows for all payment types
 ✅ **Security Architecture** - Authentication, encryption, and PCI-DSS compliance
 ✅ **Deployment Architecture** - Kubernetes topology and autoscaling
-✅ **State Machines** - Transaction, discount, and wallet lifecycle states
+✅ **State Machines** - Transaction and wallet lifecycle states
 ✅ **Integration Patterns** - Event-driven, circuit breaker, CQRS, and idempotency
 ✅ **Performance** - Caching strategies and sharding (future)
 ✅ **Observability** - Metrics, logging, tracing, and alerting
