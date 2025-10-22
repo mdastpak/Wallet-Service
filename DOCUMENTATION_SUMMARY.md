@@ -156,7 +156,6 @@ docs/
 - **transactions**: Immutable transaction records (partitioned by month)
 - **ledger_entries**: Double-entry bookkeeping records
 - **idempotency_keys**: Duplicate protection with TTL
-- **discount_codes**: Promotional codes
 - **installment_schedules**: Credit payment amortization
 
 ### Key Indexes
@@ -188,9 +187,6 @@ docs/
 - `GET /v1/aggregates/users/{id}/balance` - User total balance
 - `GET /v1/aggregates/businesses/{id}/balance` - Business total balance
 - `GET /v1/aggregates/global/balance` - System-wide balance (admin)
-
-### Discounts
-- `POST /v1/discounts/validate` - Validate discount code
 
 ---
 
