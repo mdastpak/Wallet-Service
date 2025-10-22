@@ -197,23 +197,18 @@ graph TB
 
 ## Entity Relationships
 
-### Complete ER Diagram (Updated with Business Line Support)
+### Complete ER Diagram (Hierarchical Business Structure)
 
 ```mermaid
 erDiagram
+    BUSINESS ||--o{ BUSINESS : "has_children"
     BUSINESS ||--o{ USER : "employs"
-    BUSINESS ||--o{ BUSINESS_LINE : "has_divisions"
-    BUSINESS_LINE ||--o{ WALLET : "segregates"
+    BUSINESS ||--o{ WALLET : "contains"
     USER ||--o{ WALLET : "owns"
     WALLET ||--o{ LEDGER_ENTRY : "records"
     TRANSACTION ||--o{ LEDGER_ENTRY : "contains"
     USER ||--o{ TRANSACTION : "initiates"
     BUSINESS ||--o{ TRANSACTION : "processes"
-    DISCOUNT_CODE ||--o{ TRANSACTION : "applies_to"
-    DISCOUNT_CODE ||--o{ DISCOUNT_CODE_ELIGIBILITY : "has_eligibility"
-    DISCOUNT_CODE_ELIGIBILITY }o--o| USER : "specific_user"
-    DISCOUNT_CODE_ELIGIBILITY }o--o| BUSINESS : "specific_business"
-    DISCOUNT_CODE_ELIGIBILITY }o--o| BUSINESS_LINE : "specific_business_line"
     TRANSACTION ||--o| TRANSACTION : "rollback_of"
     TRANSACTION ||--o{ PAYMENT_METADATA : "has"
     USER ||--o{ CREDIT_ACCOUNT : "holds"
@@ -222,23 +217,19 @@ erDiagram
 
     BUSINESS {
         uuid id PK
+        uuid parent_id FK
         string name
+        string code
         string business_type
         string tax_id
         string country
-        timestamp created_at
-        string status
-    }
-
-    BUSINESS_LINE {
-        uuid id PK
-        uuid business_id FK
-        string name
-        string code
+        string email
+        string phone
         string description
         boolean is_active
         timestamp created_at
         timestamp updated_at
+        string status
     }
 
     USER {
@@ -248,22 +239,24 @@ erDiagram
         string encrypted_phone
         string full_name
         string role
-        timestamp created_at
-        string status
         string kyc_status
+        timestamp kyc_verified_at
+        timestamp created_at
+        timestamp updated_at
+        string status
     }
 
     WALLET {
         uuid id PK
         uuid user_id FK
         uuid business_id FK
-        uuid business_line_id FK
         string currency
         string wallet_type
         string wallet_name
         bigint reserved_amount
         boolean is_active
         timestamp created_at
+        timestamp updated_at
         string status
         int version
     }
@@ -279,12 +272,11 @@ erDiagram
         string payment_type
         string status
         string idempotency_key
-        uuid discount_code_id FK
-        bigint discount_amount
-        bigint final_amount
         uuid ref_transaction_id FK
         string gateway_transaction_id
+        string correlation_id
         timestamp created_at
+        timestamp updated_at
         int version
     }
 
@@ -299,34 +291,6 @@ erDiagram
         string status
     }
 
-    DISCOUNT_CODE {
-        uuid id PK
-        string code
-        string discount_type
-        decimal discount_value
-        bigint min_amount
-        bigint max_discount
-        timestamp expiry_date
-        int max_usage
-        int usage_count
-        int max_per_user
-        string eligibility_type
-        string description
-        timestamp created_at
-        string status
-        int version
-    }
-
-    DISCOUNT_CODE_ELIGIBILITY {
-        uuid id PK
-        uuid discount_code_id FK
-        uuid user_id FK
-        uuid business_id FK
-        string eligibility_type
-        string user_email
-        timestamp created_at
-    }
-
     PAYMENT_METADATA {
         uuid id PK
         uuid transaction_id FK
@@ -339,22 +303,23 @@ erDiagram
         uuid id PK
         uuid user_id FK
         bigint credit_limit
-        bigint available_credit
         bigint outstanding_balance
+        decimal interest_rate
+        int grace_period_days
         timestamp created_at
-        int version
+        timestamp updated_at
+        string status
     }
 
     INSTALLMENT_SCHEDULE {
         uuid id PK
         uuid transaction_id FK
-        int total_installments
-        int paid_installments
+        int installment_number
         bigint installment_amount
-        string frequency
-        timestamp next_due_date
-        timestamp created_at
+        timestamp due_date
+        timestamp paid_at
         string status
+        timestamp created_at
     }
 
     IDEMPOTENCY_KEY {
