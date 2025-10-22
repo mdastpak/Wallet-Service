@@ -70,7 +70,7 @@ C4Container
         Container(discount_svc, "Discount Service", "Spring Boot", "Manages discount codes")
         Container(admin_svc, "Admin Service", "Spring Boot", "Admin operations and reviews")
 
-        ContainerDb(oracle_db, "Oracle Database", "Oracle 19c", "ACID transactional store, partitioned tables")
+        ContainerDb(oracle_db, "Oracle Database", "Oracle Database 26ai", "ACID transactional store, partitioned tables")
         ContainerDb(redis, "Redis Cluster", "Redis 7.x", "Distributed cache, locks, CQRS read models")
         ContainerQueue(kafka, "Kafka Cluster", "Apache Kafka", "Event streaming, audit logs")
     }

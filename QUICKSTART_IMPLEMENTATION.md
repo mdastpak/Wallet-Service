@@ -32,7 +32,7 @@ Production-ready **Wallet Service** design for enterprise financial platform sup
 ### Week 1: Core Implementation
 
 - [ ] Set up development environment
-- [ ] Create database (Oracle 19c) with schema
+- [ ] Create database (Oracle Database 26ai) with schema
 - [ ] Implement **Fraud Detection** ([spec](./docs/04-security-compliance/fraud-detection.md))
 - [ ] Implement **Rate Limiting** ([spec](./docs/04-security-compliance/rate-limiting-specs.md))
 - [ ] Add **Circuit Breaker** ([pattern](./docs/06-design-patterns/circuit-breaker.md))
@@ -247,7 +247,7 @@ docs/08-testing/
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | **Backend** | Spring Boot + Java | 3.x / 17 LTS |
-| **Database** | Oracle 19c Enterprise | 19c |
+| **Database** | Oracle Database 26ai | 26ai |
 | **Cache** | Redis Cluster | 7.x |
 | **Messaging** | Apache Kafka | 3.x |
 | **Container** | Kubernetes | 1.27+ |

@@ -121,7 +121,7 @@ Global System
 | Category | Technology | Purpose |
 |----------|-----------|---------|
 | **Backend** | Spring Boot 3.x + Java 17 | Application framework |
-| **Database** | Oracle Database 19c | ACID transactions |
+| **Database** | Oracle Database 26ai | ACID transactions |
 | **Cache** | Redis Cluster 7.x | Distributed cache/locks |
 | **Messaging** | Apache Kafka 3.x | Event streaming |
 | **Auth** | OAuth 2.0 + mTLS | Authentication |

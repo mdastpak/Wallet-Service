@@ -188,7 +188,7 @@ graph TB
 |----------|-----------|---------|---------|
 | **Language** | Java | 17 LTS | Application runtime |
 | **Framework** | Spring Boot | 3.2+ | Application framework |
-| **Database** | Oracle Database | 19c Enterprise | ACID transactional store |
+| **Database** | Oracle Database | 26ai Enterprise | ACID transactional store |
 | **Cache** | Redis Cluster | 7.x | Distributed cache/locks |
 | **Messaging** | Apache Kafka | 3.x | Event streaming |
 | **Auth** | OAuth 2.0 + mTLS | - | Authentication |

@@ -2,7 +2,7 @@
 
 **Version**: 3.0 (Simplified with Hierarchical Business Structure)
 **Last Updated**: October 2025
-**Database**: Oracle 19c Enterprise Edition
+**Database**: Oracle Database 26ai Enterprise Edition
 
 ---
 
