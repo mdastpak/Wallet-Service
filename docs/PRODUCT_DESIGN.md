@@ -67,7 +67,6 @@ C4Container
         Container(wallet_svc, "Wallet Service", "Spring Boot", "Manages wallet lifecycle and balances")
         Container(payment_svc, "Payment Service", "Spring Boot", "Processes payments and transactions")
         Container(aggregation_svc, "Aggregation Service", "Spring Boot", "Calculates real-time aggregates")
-        Container(discount_svc, "Discount Service", "Spring Boot", "Manages discount codes")
         Container(admin_svc, "Admin Service", "Spring Boot", "Admin operations and reviews")
 
         ContainerDb(oracle_db, "Oracle Database", "Oracle Database 26ai", "ACID transactional store, partitioned tables")
@@ -84,7 +83,6 @@ C4Container
     Rel(api_gateway, wallet_svc, "Routes wallet requests", "HTTP/Internal")
     Rel(api_gateway, payment_svc, "Routes payment requests", "HTTP/Internal")
     Rel(api_gateway, aggregation_svc, "Routes aggregation queries", "HTTP/Internal")
-    Rel(api_gateway, discount_svc, "Routes discount requests", "HTTP/Internal")
     Rel(api_gateway, admin_svc, "Routes admin requests", "HTTP/Internal")
 
     Rel(wallet_svc, oracle_db, "Reads/Writes wallet data", "JDBC")
@@ -101,9 +99,6 @@ C4Container
     Rel(aggregation_svc, redis, "Writes aggregated balances", "Redis Protocol")
     Rel(kafka, aggregation_svc, "Consumes transaction events", "Kafka Protocol")
 
-    Rel(discount_svc, oracle_db, "Manages discount codes", "JDBC")
-    Rel(discount_svc, redis, "Caches discount rules", "Redis Protocol")
-
     Rel(admin_svc, oracle_db, "Reviews transactions", "JDBC")
 ```
 
@@ -117,25 +112,20 @@ C4Component
         Component(payment_controller, "Payment Controller", "REST Controller", "Handles HTTP payment requests")
         Component(idempotency_filter, "Idempotency Filter", "Servlet Filter", "Enforces idempotency")
         Component(payment_orchestrator, "Payment Orchestrator", "Service", "Orchestrates payment workflow")
-        Component(discount_validator, "Discount Validator", "Service", "Validates discount codes")
         Component(ledger_writer, "Ledger Writer", "Service", "Creates double-entry ledger entries")
         Component(gateway_client, "Gateway Client", "HTTP Client", "Integrates with payment gateway")
         Component(event_publisher, "Event Publisher", "Kafka Producer", "Publishes domain events")
         Component(rollback_service, "Rollback Service", "Service", "Handles compensation transactions")
     }
 
-    ContainerDb(oracle_db, "Oracle Database", "Transactions, Ledger, Discounts")
-    ContainerDb(redis, "Redis", "Idempotency locks, Discount cache")
+    ContainerDb(oracle_db, "Oracle Database", "Transactions, Ledger")
+    ContainerDb(redis, "Redis", "Idempotency locks, Balance cache")
     ContainerQueue(kafka, "Kafka", "Event stream")
     System_Ext(payment_gateway, "Payment Gateway", "External processor")
 
     Rel(payment_controller, idempotency_filter, "Passes request through")
     Rel(idempotency_filter, redis, "Acquires distributed lock")
     Rel(idempotency_filter, payment_orchestrator, "Invokes if lock acquired")
-
-    Rel(payment_orchestrator, discount_validator, "Validates discount code")
-    Rel(discount_validator, redis, "Checks discount cache")
-    Rel(discount_validator, oracle_db, "Loads eligibility rules")
 
     Rel(payment_orchestrator, ledger_writer, "Creates ledger entries")
     Rel(ledger_writer, oracle_db, "Writes double-entry records")
