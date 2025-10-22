@@ -35,7 +35,6 @@ graph TB
         WALLET[Wallet Service]
         PAYMENT[Payment Service]
         AGGREGATE[Aggregation Service]
-        DISCOUNT[Discount Service]
         AUTH[Auth Service]
     end
 
@@ -57,7 +56,6 @@ graph TB
     APIGW --> WALLET
     APIGW --> PAYMENT
     APIGW --> AGGREGATE
-    APIGW --> DISCOUNT
     APIGW --> AUTH
 
     WALLET --> REDIS
@@ -71,9 +69,6 @@ graph TB
 
     AGGREGATE --> REDIS
     AGGREGATE --> ORACLE
-
-    DISCOUNT --> REDIS
-    DISCOUNT --> ORACLE
 
     AUTH --> REDIS
 
@@ -99,38 +94,15 @@ graph TB
     PERSONAL --> P2["EUR Personal Wallet<br/>Balance: 3000 EUR<br/>Personal Euro"]
     PERSONAL --> P3["BTC Personal Wallet<br/>Balance: 0.5 BTC<br/>Personal Bitcoin"]
 
-    ACME --> A1["USD Business Wallet<br/>Balance: $10,000<br/>Acme Corp USD<br/>Discount: ACME25 eligible"]
-    ACME --> A2["EUR Business Wallet<br/>Balance: 7500 EUR<br/>Acme Corp EUR<br/>Discount: ACME25 eligible"]
+    ACME --> A1["USD Business Wallet<br/>Balance: $10,000<br/>Acme Corp USD"]
+    ACME --> A2["EUR Business Wallet<br/>Balance: 7500 EUR<br/>Acme Corp EUR"]
 
-    TECH --> T1["USD Business Wallet<br/>Balance: $2,500<br/>TechStart USD<br/>Discount: TECH10 eligible"]
-    TECH --> T2["BTC Business Wallet<br/>Balance: 0.1 BTC<br/>TechStart BTC<br/>Discount: TECH10 eligible"]
-
-    subgraph DISC["Discount Code Segregation"]
-        DISC1["ACME25: 25% off<br/>SPECIFIC_BUSINESS<br/>business_id = acme-123"]
-        DISC2["TECH10: 10% off<br/>SPECIFIC_BUSINESS<br/>business_id = tech-456"]
-        DISC3["PUBLIC20: 20% off<br/>ALL_USERS<br/>Works for all wallets"]
-    end
-
-    DISC1 -.Valid for.-> A1
-    DISC1 -.Valid for.-> A2
-    DISC1 -.NOT valid.-> P1
-    DISC1 -.NOT valid.-> T1
-
-    DISC2 -.Valid for.-> T1
-    DISC2 -.Valid for.-> T2
-    DISC2 -.NOT valid.-> A1
-    DISC2 -.NOT valid.-> P1
-
-    DISC3 -.Valid for.-> P1
-    DISC3 -.Valid for.-> A1
-    DISC3 -.Valid for.-> T1
+    TECH --> T1["USD Business Wallet<br/>Balance: $2,500<br/>TechStart USD"]
+    TECH --> T2["BTC Business Wallet<br/>Balance: 0.1 BTC<br/>TechStart BTC"]
 
     style PERSONAL fill:#fff4e1
     style ACME fill:#e1f5ff
     style TECH fill:#e8f4f8
-    style DISC1 fill:#ffe4e1
-    style DISC2 fill:#e8ffe8
-    style DISC3 fill:#f0e8ff
 
 ```
 
@@ -402,11 +374,11 @@ erDiagram
 
 ## User Journeys
 
-### Consumer Payment Journey with Discount
+### Consumer Payment Journey
 
 ```mermaid
 journey
-    title Consumer Payment Journey - PREPAYMENT with Discount Code
+    title Consumer Payment Journey - PREPAYMENT
 
     section Registration & Setup
         Sign up with email: 5: Consumer
@@ -416,12 +388,10 @@ journey
     section Browse & Select
         Browse products: 5: Consumer
         Add items to cart: 5: Consumer
-        Apply discount code VIP50: 4: Consumer, System
-        View discounted price: 5: Consumer
+        View cart total: 5: Consumer
 
     section Payment
         Initiate payment: 5: Consumer
-        System validates discount eligibility: 3: System
         System reserves funds: 3: System
         Receive payment confirmation: 5: Consumer
 
@@ -501,112 +471,6 @@ flowchart TD
     style VAL_2FA_FAIL fill:#f8d7da
 ```
 
-### Discount Code Eligibility Validation
-
-```mermaid
-flowchart TD
-    START([Validate Discount Code]) --> LOAD_CODE[Load Discount Code]
-    LOAD_CODE --> EXISTS{Code<br/>Exists?}
-    EXISTS -->|No| NOT_FOUND[Error: Code Not Found]
-    EXISTS -->|Yes| CHECK_STATUS{Status<br/>ACTIVE?}
-
-    CHECK_STATUS -->|No| INACTIVE[Error: Code Inactive]
-    CHECK_STATUS -->|Yes| CHECK_EXPIRY{Expiry Date<br/>> Now?}
-
-    CHECK_EXPIRY -->|No| EXPIRED[Error: Code Expired]
-    CHECK_EXPIRY -->|Yes| CHECK_USAGE{Usage Count<br/>< Max Usage?}
-
-    CHECK_USAGE -->|No| USAGE_LIMIT[Error: Usage Limit Reached]
-    CHECK_USAGE -->|Yes| CHECK_USER_USAGE{User Usage<br/>< Max Per User?}
-
-    CHECK_USER_USAGE -->|No| USER_LIMIT[Error: User Limit Reached]
-    CHECK_USER_USAGE -->|Yes| CHECK_MIN_AMOUNT{Amount >=<br/>Min Amount?}
-
-    CHECK_MIN_AMOUNT -->|No| MIN_AMOUNT[Error: Below Min Amount]
-    CHECK_MIN_AMOUNT -->|Yes| CHECK_ELIG_TYPE{Eligibility<br/>Type?}
-
-    CHECK_ELIG_TYPE -->|ALL_USERS| CALC_DISCOUNT[Calculate Discount Amount]
-    CHECK_ELIG_TYPE -->|RESTRICTED| LOAD_ELIGIBILITY[Load Eligibility Rules]
-
-    LOAD_ELIGIBILITY --> CHECK_RULES{Any Rule<br/>Matches?}
-    CHECK_RULES -->|No| NOT_ELIGIBLE[Error: User Not Eligible]
-    CHECK_RULES -->|Yes| MATCH_TYPE{Which Type?}
-
-    MATCH_TYPE -->|SPECIFIC_USER| CHECK_USER[User ID Matches?]
-    MATCH_TYPE -->|SPECIFIC_BUSINESS| CHECK_BUSINESS[Business ID Matches?]
-    MATCH_TYPE -->|EMAIL_DOMAIN| CHECK_EMAIL[Email Ends With Domain?]
-    MATCH_TYPE -->|USER_ROLE| CHECK_ROLE[User Has Role?]
-
-    CHECK_USER -->|Yes| CALC_DISCOUNT
-    CHECK_BUSINESS -->|Yes| CALC_DISCOUNT
-    CHECK_EMAIL -->|Yes| CALC_DISCOUNT
-    CHECK_ROLE -->|Yes| CALC_DISCOUNT
-
-    CHECK_USER -->|No| NOT_ELIGIBLE
-    CHECK_BUSINESS -->|No| NOT_ELIGIBLE
-    CHECK_EMAIL -->|No| NOT_ELIGIBLE
-    CHECK_ROLE -->|No| NOT_ELIGIBLE
-
-    CALC_DISCOUNT --> APPLY_CAP{Discount ><br/>Max Discount?}
-    APPLY_CAP -->|Yes| CAP_DISCOUNT[Apply Max Discount Cap]
-    APPLY_CAP -->|No| USE_CALCULATED[Use Calculated Discount]
-
-    CAP_DISCOUNT --> SUCCESS([Return Valid Discount])
-    USE_CALCULATED --> SUCCESS
-
-    NOT_FOUND --> END([Validation Failed])
-    INACTIVE --> END
-    EXPIRED --> END
-    USAGE_LIMIT --> END
-    USER_LIMIT --> END
-    MIN_AMOUNT --> END
-    NOT_ELIGIBLE --> END
-
-    style START fill:#d4edda
-    style SUCCESS fill:#d4edda
-    style NOT_FOUND fill:#f8d7da
-    style INACTIVE fill:#f8d7da
-    style EXPIRED fill:#f8d7da
-    style USAGE_LIMIT fill:#f8d7da
-    style USER_LIMIT fill:#f8d7da
-    style MIN_AMOUNT fill:#f8d7da
-    style NOT_ELIGIBLE fill:#f8d7da
-```
-
----
-
-## Sequence Diagrams
-
-### Business-Specific Discount Validation
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant Alice
-    participant Payment Service
-    participant Discount Service
-    participant Oracle DB
-
-    Note over Alice: Alice has 3 USD wallets:<br/>Personal, Acme, TechStart
-
-    Alice->>Payment Service: POST /payments<br/>{source_wallet_id: wallet-004 (Acme),<br/>amount: 10000, discount_code: "ACME25"}
-
-    Payment Service->>Discount Service: Validate "ACME25" for user Alice
-
-    Discount Service->>Oracle DB: Load discount code "ACME25"
-    Oracle DB-->>Discount Service: {eligibility_type: SPECIFIC_BUSINESS,<br/>eligible_business_id: biz-acme}
-
-    Discount Service->>Oracle DB: Load source wallet details
-    Oracle DB-->>Discount Service: {wallet_id: wallet-004,<br/>business_id: biz-acme}
-
-    Note over Discount Service: Check eligibility:<br/>wallet.business_id == eligible_business_id<br/>biz-acme == biz-acme ✅
-
-    Discount Service-->>Payment Service: Valid (discount_amount: 2500)
-
-    Payment Service->>Oracle DB: Create transaction<br/>(amount: 10000, discount: 2500, final: 7500)
-    Payment Service-->>Alice: 200 OK {final_amount: $75.00}
-```
-
 ---
 
 ## State Machines
@@ -647,38 +511,7 @@ stateDiagram-v2
 
     note right of ROLLED_BACK
         Compensation transaction
-        created, funds restored,
-        discount usage decremented
-    end note
-```
-
-### Discount Code Lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> DRAFT: Admin Creates Code
-
-    DRAFT --> ACTIVE: Admin Activates
-    DRAFT --> DELETED: Admin Deletes
-
-    ACTIVE --> ACTIVE: User Applies
-    ACTIVE --> EXPIRED: Expiry Date Reached
-    ACTIVE --> EXHAUSTED: Usage Limit Reached
-    ACTIVE --> INACTIVE: Admin Deactivates
-
-    INACTIVE --> ACTIVE: Admin Reactivates
-    INACTIVE --> DELETED: Admin Deletes
-
-    EXPIRED --> [*]
-    EXHAUSTED --> [*]
-    DELETED --> [*]
-
-    note right of ACTIVE
-        Can be used by eligible users\nUsage count incremented\nOn rollback - count decremented
-    end note
-
-    note right of EXHAUSTED
-        usage_count greater than max_usage\nCannot be reactivated
+        created, funds restored
     end note
 ```
 
