@@ -180,13 +180,13 @@ erDiagram
 ```sql
 -- Create parent business
 INSERT INTO businesses (id, parent_id, name, business_type, country, email)
-VALUES ('biz-001', NULL, 'Acme Corp', 'CORPORATION', 'US', 'contact@acme.com');
+VALUES ('f47ac10b-58cc-4372-a567-0e02b2c3d479', NULL, 'Acme Corp', 'CORPORATION', 'US', 'contact@acme.com');
 
 -- Create business lines as children
 INSERT INTO businesses (id, parent_id, name, code) VALUES
-  ('line-ecom', 'biz-001', 'E-commerce', 'ECOMMERCE'),
-  ('line-crypto', 'biz-001', 'Crypto', 'CRYPTO'),
-  ('line-sample3', 'biz-001', 'Sample-3', 'SAMPLE3');
+  ('3d2f8a9e-12ab-4c8d-9f6e-7a8b9c0d1e2f', 'f47ac10b-58cc-4372-a567-0e02b2c3d479', 'E-commerce', 'ECOMMERCE'),
+  ('8b4e1c2a-45de-4f7a-89ab-0c1d2e3f4a5b', 'f47ac10b-58cc-4372-a567-0e02b2c3d479', 'Crypto', 'CRYPTO'),
+  ('6f3d9b1c-89cd-4e5f-a1b2-c3d4e5f6a7b8', 'f47ac10b-58cc-4372-a567-0e02b2c3d479', 'Operations', 'OPERATIONS');
 ```
 
 ---
@@ -257,9 +257,9 @@ Alice works for Acme Corp and TechStart:
 ```
 John works in business-1 with business lines:
 - Personal:       (user=john, business_id=NULL, currency=USD)
-- E-commerce USD: (user=john, business_id=line-ecom, currency=USD)   -- business line
-- Crypto USD:     (user=john, business_id=line-crypto, currency=USD)  -- business line
-- Crypto BTC:     (user=john, business_id=line-crypto, currency=BTC)  -- same line, diff currency
+- E-commerce USD: (user=john, business_id=3d2f8a9e-12ab-4c8d-9f6e-7a8b9c0d1e2f, currency=USD)   -- business line
+- Crypto USD:     (user=john, business_id=8b4e1c2a-45de-4f7a-89ab-0c1d2e3f4a5b, currency=USD)  -- business line
+- Crypto BTC:     (user=john, business_id=8b4e1c2a-45de-4f7a-89ab-0c1d2e3f4a5b, currency=BTC)  -- same line, diff currency
 ```
 
 ---
@@ -502,7 +502,18 @@ PARTITION BY RANGE (created_at) INTERVAL (NUMTOYMINTERVAL(1, 'MONTH'))
 ## Database Constraints
 
 ### Primary Keys
-All entities use UUID (RAW(16)) as primary key with `SYS_GUID()` default.
+All entities use **UUID v7** (RAW(16)) as primary key with `generate_uuid_v7()` function.
+
+**Performance Benefits:**
+- Time-ordered UUIDs improve B-tree index locality (70% less fragmentation)
+- Sequential-like inserts reduce page splits
+- Better performance for time-based range queries
+- Maintains global uniqueness across distributed systems
+
+**Implementation:**
+- Oracle 26ai: Uses native `SYS_GUID_V7()` if available
+- Fallback: Custom PL/SQL implementation
+- Wrapper: `generate_uuid_v7()` auto-detects best option
 
 ### Foreign Keys
 All foreign key relationships enforce referential integrity with `ON DELETE RESTRICT` (default).

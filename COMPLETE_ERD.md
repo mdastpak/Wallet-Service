@@ -178,13 +178,13 @@ erDiagram
 ```sql
 -- Create parent business
 INSERT INTO businesses (id, parent_id, name, business_type, country, email)
-VALUES ('biz-001', NULL, 'Acme Corp', 'CORPORATION', 'US', 'contact@acme.com');
+VALUES ('f47ac10b-58cc-4372-a567-0e02b2c3d479', NULL, 'Acme Corp', 'CORPORATION', 'US', 'contact@acme.com');
 
 -- Create business lines as children
 INSERT INTO businesses (id, parent_id, name, code) VALUES
-  ('line-ecom', 'biz-001', 'E-commerce', 'ECOMMERCE'),
-  ('line-crypto', 'biz-001', 'Crypto', 'CRYPTO'),
-  ('line-sample3', 'biz-001', 'Sample-3', 'SAMPLE3');
+  ('3d2f8a9e-12ab-4c8d-9f6e-7a8b9c0d1e2f', 'f47ac10b-58cc-4372-a567-0e02b2c3d479', 'E-commerce', 'ECOMMERCE'),
+  ('8b4e1c2a-45de-4f7a-89ab-0c1d2e3f4a5b', 'f47ac10b-58cc-4372-a567-0e02b2c3d479', 'Crypto', 'CRYPTO'),
+  ('6f3d9b1c-89cd-4e5f-a1b2-c3d4e5f6a7b8', 'f47ac10b-58cc-4372-a567-0e02b2c3d479', 'Operations', 'OPERATIONS');
 ```
 
 ---
@@ -245,7 +245,7 @@ CREATE UNIQUE INDEX idx_wallet_user_business_currency ON wallets(
 ```
 Alice works for Acme Corp and TechStart:
 - Personal USD: (user=alice, business_id=NULL, currency=USD)
-- Acme USD:     (user=alice, business_id=biz-001, currency=USD)  -- parent business
+- Acme USD:     (user=alice, business_id=f47ac10b-58cc-4372-a567-0e02b2c3d479, currency=USD)  -- parent business
 - TechStart USD:(user=alice, business_id=biz-002, currency=USD)  -- different parent
 ```
 
@@ -253,9 +253,9 @@ Alice works for Acme Corp and TechStart:
 ```
 John works in business-1 with business lines:
 - Personal:       (user=john, business_id=NULL, currency=USD)
-- E-commerce USD: (user=john, business_id=line-ecom, currency=USD)   -- business line
-- Crypto USD:     (user=john, business_id=line-crypto, currency=USD)  -- business line
-- Crypto BTC:     (user=john, business_id=line-crypto, currency=BTC)  -- same line, diff currency
+- E-commerce USD: (user=john, business_id=3d2f8a9e-12ab-4c8d-9f6e-7a8b9c0d1e2f, currency=USD)   -- business line
+- Crypto USD:     (user=john, business_id=8b4e1c2a-45de-4f7a-89ab-0c1d2e3f4a5b, currency=USD)  -- business line
+- Crypto BTC:     (user=john, business_id=8b4e1c2a-45de-4f7a-89ab-0c1d2e3f4a5b, currency=BTC)  -- same line, diff currency
 ```
 
 ---
@@ -405,7 +405,19 @@ LEDGER_ENTRY (N) ──── affects ───> (1) WALLET
 ## Database Constraints
 
 ### Primary Keys
-All entities use UUID (RAW(16)) as primary key with `SYS_GUID()` default.
+All entities use **UUID v7** (RAW(16)) as primary key for optimal performance.
+
+**Why UUID v7?**
+- ✅ **Time-ordered**: Natural chronological sorting improves query performance
+- ✅ **Index efficiency**: Better B-tree locality reduces index fragmentation
+- ✅ **Insert performance**: Sequential-like inserts minimize page splits
+- ✅ **Range queries**: Time-based queries benefit from clustering
+- ✅ **Globally unique**: Maintains uniqueness across distributed systems
+
+**Implementation**:
+- **Oracle 26ai Native**: Uses built-in `SYS_GUID_V7()` function if available
+- **Fallback**: Custom PL/SQL `generate_uuid_v7_custom()` for compatibility
+- **Wrapper**: `generate_uuid_v7()` automatically selects the best implementation
 
 ### Foreign Keys
 All foreign key relationships enforce referential integrity with `ON DELETE RESTRICT` (default).
