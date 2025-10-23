@@ -414,7 +414,10 @@ All entities use **UUID v7** (RAW(16)) as primary key for optimal performance.
 - ✅ **Range queries**: Time-based queries benefit from clustering
 - ✅ **Globally unique**: Maintains uniqueness across distributed systems
 
-**Implementation**: Custom PL/SQL function `generate_uuid_v7()` instead of `SYS_GUID()`
+**Implementation**:
+- **Oracle 26ai Native**: Uses built-in `SYS_GUID_V7()` function if available
+- **Fallback**: Custom PL/SQL `generate_uuid_v7_custom()` for compatibility
+- **Wrapper**: `generate_uuid_v7()` automatically selects the best implementation
 
 ### Foreign Keys
 All foreign key relationships enforce referential integrity with `ON DELETE RESTRICT` (default).

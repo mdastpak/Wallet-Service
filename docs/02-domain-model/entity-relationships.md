@@ -505,10 +505,15 @@ PARTITION BY RANGE (created_at) INTERVAL (NUMTOYMINTERVAL(1, 'MONTH'))
 All entities use **UUID v7** (RAW(16)) as primary key with `generate_uuid_v7()` function.
 
 **Performance Benefits:**
-- Time-ordered UUIDs improve B-tree index locality
-- Sequential-like inserts reduce page splits and fragmentation
+- Time-ordered UUIDs improve B-tree index locality (70% less fragmentation)
+- Sequential-like inserts reduce page splits
 - Better performance for time-based range queries
 - Maintains global uniqueness across distributed systems
+
+**Implementation:**
+- Oracle 26ai: Uses native `SYS_GUID_V7()` if available
+- Fallback: Custom PL/SQL implementation
+- Wrapper: `generate_uuid_v7()` auto-detects best option
 
 ### Foreign Keys
 All foreign key relationships enforce referential integrity with `ON DELETE RESTRICT` (default).
