@@ -15,7 +15,55 @@ Complete Oracle Database schema for the Wallet Service, including all tables, in
 -- WALLET SERVICE - ORACLE DATABASE SCHEMA
 -- =====================================================
 
--- Create sequences
+-- =====================================================
+-- UUID v7 GENERATOR FUNCTION
+-- =====================================================
+-- UUID v7 provides time-ordered UUIDs for better database performance:
+-- - Time-ordered structure improves B-tree index locality
+-- - Sequential-like inserts reduce index fragmentation
+-- - Better range query performance on time-based queries
+-- - Maintains global uniqueness across distributed systems
+CREATE OR REPLACE FUNCTION generate_uuid_v7 RETURN RAW IS
+    v_time_ms NUMBER;
+    v_time_bytes RAW(6);
+    v_random_bytes RAW(10);
+    v_uuid RAW(16);
+BEGIN
+    -- Get current timestamp in milliseconds since epoch
+    v_time_ms := (EXTRACT(SECOND FROM SYSTIMESTAMP) +
+                  EXTRACT(MINUTE FROM SYSTIMESTAMP) * 60 +
+                  EXTRACT(HOUR FROM SYSTIMESTAMP) * 3600 +
+                  (EXTRACT(DAY FROM SYSTIMESTAMP) - 1) * 86400 +
+                  (EXTRACT(MONTH FROM SYSTIMESTAMP) - 1) * 2592000 +
+                  (EXTRACT(YEAR FROM SYSTIMESTAMP) - 1970) * 31536000) * 1000;
+
+    -- First 48 bits: timestamp in milliseconds
+    v_time_bytes := UTL_RAW.SUBSTR(UTL_RAW.CAST_FROM_NUMBER(v_time_ms), -6);
+
+    -- Next 80 bits: random data
+    v_random_bytes := SYS_GUID();
+    v_random_bytes := UTL_RAW.SUBSTR(v_random_bytes, 1, 10);
+
+    -- Set version (v7 = 0111) in bits 48-51
+    v_random_bytes := UTL_RAW.BIT_OR(
+        UTL_RAW.BIT_AND(v_random_bytes, HEXTORAW('0FFFFFFFFFFFFFFFFFFFFFFF')),
+        HEXTORAW('70000000000000000000')
+    );
+
+    -- Set variant (10) in bits 64-65
+    v_random_bytes := UTL_RAW.BIT_OR(
+        UTL_RAW.BIT_AND(v_random_bytes, HEXTORAW('FFFF3FFFFFFFFFFFFFFFFFFF')),
+        HEXTORAW('00008000000000000000')
+    );
+
+    -- Concatenate timestamp and random parts
+    v_uuid := UTL_RAW.CONCAT(v_time_bytes, v_random_bytes);
+
+    RETURN v_uuid;
+END;
+/
+
+-- Create sequences (for auditing/logging only - not for primary keys)
 CREATE SEQUENCE business_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE user_seq START WITH 1 INCREMENT BY 1;
 CREATE SEQUENCE wallet_seq START WITH 1 INCREMENT BY 1;
@@ -29,7 +77,7 @@ CREATE SEQUENCE ledger_entry_seq START WITH 1 INCREMENT BY 1;
 -- Parent records (parent_id IS NULL) represent businesses
 -- Child records (parent_id IS NOT NULL) represent business lines/divisions
 CREATE TABLE businesses (
-    id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+    id RAW(16) DEFAULT generate_uuid_v7() PRIMARY KEY,
     parent_id RAW(16), -- NULL for parent business, populated for business lines
     name VARCHAR2(255) NOT NULL,
     code VARCHAR2(50), -- Business line code (e.g., ECOMMERCE, CRYPTO) - NULL for parent
@@ -72,7 +120,7 @@ COMMENT ON COLUMN businesses.description IS 'Optional description - primarily fo
 -- USER TABLE
 -- =====================================================
 CREATE TABLE users (
-    id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+    id RAW(16) DEFAULT generate_uuid_v7() PRIMARY KEY,
     business_id RAW(16),
     email VARCHAR2(255) NOT NULL UNIQUE,
     encrypted_phone VARCHAR2(500),
@@ -101,7 +149,7 @@ COMMENT ON COLUMN users.business_id IS 'NULL for B2C users, populated for B2B (p
 -- When referencing business line, it represents line-specific wallet
 -- When referencing parent business (where parent_id IS NULL), it represents business-level wallet
 CREATE TABLE wallets (
-    id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+    id RAW(16) DEFAULT generate_uuid_v7() PRIMARY KEY,
     user_id RAW(16) NOT NULL,
     business_id RAW(16), -- NULL for B2C, references parent business OR business line
     currency CHAR(3) NOT NULL, -- ISO 4217
@@ -164,7 +212,7 @@ COMMENT ON COLUMN wallets.version IS 'Optimistic locking version for concurrent 
 -- TRANSACTION TABLE (PARTITIONED BY MONTH)
 -- =====================================================
 CREATE TABLE transactions (
-    id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+    id RAW(16) DEFAULT generate_uuid_v7() PRIMARY KEY,
     user_id RAW(16) NOT NULL,
     business_id RAW(16),
     source_wallet_id RAW(16),
@@ -207,7 +255,7 @@ COMMENT ON COLUMN transactions.amount IS 'Transaction amount in minor units (e.g
 -- LEDGER_ENTRY TABLE
 -- =====================================================
 CREATE TABLE ledger_entries (
-    id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+    id RAW(16) DEFAULT generate_uuid_v7() PRIMARY KEY,
     transaction_id RAW(16) NOT NULL,
     wallet_id RAW(16) NOT NULL,
     entry_type VARCHAR2(10) NOT NULL CHECK (entry_type IN ('DEBIT', 'CREDIT')),
@@ -232,7 +280,7 @@ COMMENT ON COLUMN ledger_entries.amount IS 'Always positive; direction from entr
 -- PAYMENT_METADATA TABLE
 -- =====================================================
 CREATE TABLE payment_metadata (
-    id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+    id RAW(16) DEFAULT generate_uuid_v7() PRIMARY KEY,
     transaction_id RAW(16) NOT NULL,
     key VARCHAR2(100) NOT NULL,
     value CLOB,
@@ -249,7 +297,7 @@ COMMENT ON TABLE payment_metadata IS 'Flexible key-value metadata for transactio
 -- CREDIT_ACCOUNT TABLE
 -- =====================================================
 CREATE TABLE credit_accounts (
-    id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+    id RAW(16) DEFAULT generate_uuid_v7() PRIMARY KEY,
     user_id RAW(16) NOT NULL UNIQUE,
     credit_limit NUMBER(19,0) NOT NULL,
     available_credit NUMBER(19,0) NOT NULL,
@@ -271,7 +319,7 @@ COMMENT ON TABLE credit_accounts IS 'User credit accounts for postpayment and cr
 -- INSTALLMENT_SCHEDULE TABLE
 -- =====================================================
 CREATE TABLE installment_schedules (
-    id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+    id RAW(16) DEFAULT generate_uuid_v7() PRIMARY KEY,
     transaction_id RAW(16) NOT NULL UNIQUE,
     total_installments NUMBER(3) NOT NULL,
     paid_installments NUMBER(3) DEFAULT 0,
@@ -292,7 +340,7 @@ COMMENT ON TABLE installment_schedules IS 'Installment schedules for CREDIT paym
 -- IDEMPOTENCY_KEY TABLE
 -- =====================================================
 CREATE TABLE idempotency_keys (
-    id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+    id RAW(16) DEFAULT generate_uuid_v7() PRIMARY KEY,
     key VARCHAR2(255) NOT NULL,
     user_id RAW(16) NOT NULL,
     endpoint VARCHAR2(255) NOT NULL,
@@ -315,7 +363,7 @@ COMMENT ON COLUMN idempotency_keys.cached_response IS 'Serialized JSON response 
 -- AUDIT_LOG TABLE
 -- =====================================================
 CREATE TABLE audit_logs (
-    id RAW(16) DEFAULT SYS_GUID() PRIMARY KEY,
+    id RAW(16) DEFAULT generate_uuid_v7() PRIMARY KEY,
     event_type VARCHAR2(50) NOT NULL,
     entity_type VARCHAR2(50) NOT NULL,
     entity_id RAW(16) NOT NULL,
@@ -425,8 +473,9 @@ CREATE INDEX idx_user_email_lower ON users(LOWER(email));
 ## Constraints Summary
 
 ### Primary Keys
-- All tables use `RAW(16)` UUIDs as primary keys
-- Generated via `SYS_GUID()` for global uniqueness
+- All tables use `RAW(16)` **UUID v7** as primary keys
+- Generated via `generate_uuid_v7()` function for optimal performance
+- Benefits: Time-ordered structure, better index locality, reduced fragmentation
 
 ### Foreign Keys
 - Cascading deletes disabled (preserve audit trail)

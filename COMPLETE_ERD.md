@@ -405,7 +405,16 @@ LEDGER_ENTRY (N) ──── affects ───> (1) WALLET
 ## Database Constraints
 
 ### Primary Keys
-All entities use UUID (RAW(16)) as primary key with `SYS_GUID()` default.
+All entities use **UUID v7** (RAW(16)) as primary key for optimal performance.
+
+**Why UUID v7?**
+- ✅ **Time-ordered**: Natural chronological sorting improves query performance
+- ✅ **Index efficiency**: Better B-tree locality reduces index fragmentation
+- ✅ **Insert performance**: Sequential-like inserts minimize page splits
+- ✅ **Range queries**: Time-based queries benefit from clustering
+- ✅ **Globally unique**: Maintains uniqueness across distributed systems
+
+**Implementation**: Custom PL/SQL function `generate_uuid_v7()` instead of `SYS_GUID()`
 
 ### Foreign Keys
 All foreign key relationships enforce referential integrity with `ON DELETE RESTRICT` (default).

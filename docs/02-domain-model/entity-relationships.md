@@ -502,7 +502,13 @@ PARTITION BY RANGE (created_at) INTERVAL (NUMTOYMINTERVAL(1, 'MONTH'))
 ## Database Constraints
 
 ### Primary Keys
-All entities use UUID (RAW(16)) as primary key with `SYS_GUID()` default.
+All entities use **UUID v7** (RAW(16)) as primary key with `generate_uuid_v7()` function.
+
+**Performance Benefits:**
+- Time-ordered UUIDs improve B-tree index locality
+- Sequential-like inserts reduce page splits and fragmentation
+- Better performance for time-based range queries
+- Maintains global uniqueness across distributed systems
 
 ### Foreign Keys
 All foreign key relationships enforce referential integrity with `ON DELETE RESTRICT` (default).
