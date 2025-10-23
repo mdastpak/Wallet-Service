@@ -142,22 +142,22 @@ COMMENT ON COLUMN wallets.version IS 'Optimistic locking version for concurrent 
 -- Example Data:
 -- First create parent business:
 --   INSERT INTO businesses (id, parent_id, name, business_type, country, email)
---   VALUES ('biz-001', NULL, 'Acme Corp', 'CORPORATION', 'US', 'contact@acme.com');
+--   VALUES ('f47ac10b-58cc-4372-a567-0e02b2c3d479', NULL, 'Acme Corp', 'CORPORATION', 'US', 'contact@acme.com');
 -- Then create business lines as children:
 --   INSERT INTO businesses (id, parent_id, name, code) VALUES
---     ('line-ecom', 'biz-001', 'E-commerce', 'ECOMMERCE'),
---     ('line-crypto', 'biz-001', 'Crypto', 'CRYPTO');
+--     ('3d2f8a9e-12ab-4c8d-9f6e-7a8b9c0d1e2f', 'f47ac10b-58cc-4372-a567-0e02b2c3d479', 'E-commerce', 'ECOMMERCE'),
+--     ('8b4e1c2a-45de-4f7a-89ab-0c1d2e3f4a5b', 'f47ac10b-58cc-4372-a567-0e02b2c3d479', 'Crypto', 'CRYPTO');
 --
 -- Scenario 1: User Alice works for Acme Corp and TechStart (multi-business)
 -- Personal:    (user_id=alice, business_id=NULL, currency=USD, type=PERSONAL)
--- Acme Corp:   (user_id=alice, business_id=biz-001, currency=USD, type=BUSINESS) -- parent business
+-- Acme Corp:   (user_id=alice, business_id=f47ac10b-58cc-4372-a567-0e02b2c3d479, currency=USD, type=BUSINESS) -- parent business
 -- TechStart:   (user_id=alice, business_id=biz-002, currency=USD, type=BUSINESS) -- different parent
 --
 -- Scenario 2: User John works in business-1 with business lines (intra-business segregation)
 -- Personal:       (user_id=john, business_id=NULL, currency=USD, type=PERSONAL)
--- E-commerce:     (user_id=john, business_id=line-ecom, currency=USD, type=BUSINESS) -- business line
--- Crypto USD:     (user_id=john, business_id=line-crypto, currency=USD, type=BUSINESS) -- business line
--- Crypto BTC:     (user_id=john, business_id=line-crypto, currency=BTC, type=BUSINESS) -- same line, diff currency
+-- E-commerce:     (user_id=john, business_id=3d2f8a9e-12ab-4c8d-9f6e-7a8b9c0d1e2f, currency=USD, type=BUSINESS) -- business line
+-- Crypto USD:     (user_id=john, business_id=8b4e1c2a-45de-4f7a-89ab-0c1d2e3f4a5b, currency=USD, type=BUSINESS) -- business line
+-- Crypto BTC:     (user_id=john, business_id=8b4e1c2a-45de-4f7a-89ab-0c1d2e3f4a5b, currency=BTC, type=BUSINESS) -- same line, diff currency
 -- All wallets have completely separate balances
 
 -- =====================================================
